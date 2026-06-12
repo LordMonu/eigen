@@ -58,6 +58,7 @@ export const requireActiveMembership = cache(
     .select('id, org_id, role, full_name, organizations(name)')
     .eq('user_id', user.id)
     .eq('status', 'active')
+    .is('deleted_at', null)
     .order('approved_at', { ascending: false })
     .limit(1)
     .maybeSingle()

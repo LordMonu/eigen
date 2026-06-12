@@ -37,6 +37,7 @@ interface Generation {
   assigned_at: string | null
   assigned_by: string | null
   is_waste: boolean
+  is_irrelevant: boolean
   wasted_at: string | null
   wasted_by: string | null
   hf_connection_label: string | null
@@ -50,8 +51,8 @@ interface Props {
   workStatusMap: Record<string, WorkStatus>
   userRole: 'master' | 'manager' | 'creator'
   userId: string
-  /** All connected HF account labels (from hf_connections). */
-  accountLabels: string[]
+  accounts: { id: string; label: string }[]
+  readOnly?: boolean
 }
 
 export function MediaPreview({
@@ -297,21 +298,22 @@ export function AssignTables({
   workStatusMap,
   userRole,
   userId,
-  accountLabels,
+  accounts,
+  readOnly = false,
 }: Props) {
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
-  const [accountFilter, setAccountFilter] = useState<string | null>(null)
+  const [selectedAccountLabel, setSelectedAccountLabel] = useState<string>(accounts[0]?.label || '')
 
-  // Split assignedToClient into "useful + assigned" and "wasted" buckets.
-  const allAssigned = assignedToClient.filter((g) => !g.is_waste)
-  const allWasted = assignedToClient.filter((g) => g.is_waste)
+  const allAssigned = assignedToClient.filter((g) => !g.is_waste && !g.is_irrelevant)
+  const allWasted = assignedToClient.filter((g) => g.is_waste && !g.is_irrelevant)
+  const allIrrelevant = assignedToClient.filter((g) => g.is_irrelevant)
 
-  const assignedUseful = accountFilter
-    ? allAssigned.filter((g) => g.hf_connection_label === accountFilter)
+  const assignedUseful = selectedAccountLabel
+    ? allAssigned.filter((g) => g.hf_connection_label === selectedAccountLabel)
     : allAssigned
-  const wasted = accountFilter
-    ? allWasted.filter((g) => g.hf_connection_label === accountFilter)
+  const wasted = selectedAccountLabel
+    ? allWasted.filter((g) => g.hf_connection_label === selectedAccountLabel)
     : allWasted
 
   const assignedToThisWork = assignedUseful.filter((g) => g.work_id === workId)
@@ -363,34 +365,23 @@ export function AssignTables({
         </div>
       )}
 
-      {accountLabels.length > 1 && (
+      {accounts.length > 1 && (
         <div className="flex flex-wrap gap-1.5 items-center">
           <span className="text-[10px] text-neutral-500 uppercase tracking-wider mr-1">
             Account:
           </span>
-          <button
-            type="button"
-            onClick={() => { setAccountFilter(null); setAssignedPage(1); setWastedPage(1) }}
-            className={`text-xs px-2 py-0.5 rounded transition-colors ${
-              accountFilter === null
-                ? 'bg-lime-400 text-black'
-                : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
-            }`}
-          >
-            All
-          </button>
-          {accountLabels.map((label) => (
+          {accounts.map((acc) => (
             <button
-              key={label}
+              key={acc.id}
               type="button"
-              onClick={() => { setAccountFilter(label); setAssignedPage(1); setWastedPage(1) }}
+              onClick={() => { setSelectedAccountLabel(acc.label); setAssignedPage(1); setWastedPage(1) }}
               className={`text-xs px-2 py-0.5 rounded transition-colors ${
-                accountFilter === label
+                selectedAccountLabel === acc.label
                   ? 'bg-lime-400 text-black'
                   : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700'
               }`}
             >
-              {label}
+              {acc.label}
             </button>
           ))}
         </div>
@@ -463,17 +454,19 @@ export function AssignTables({
                             : 'free'}
                         </span>
                       </td>
-                      <td className="px-2 py-2">
-                        <UnassignButton
-                          generationId={g.id}
-                          assignedAt={g.assigned_at}
-                          assignedBy={g.assigned_by}
-                          userRole={userRole}
-                          userId={userId}
-                          onDone={() => router.refresh()}
-                          onError={(msg) => setError(msg)}
-                        />
-                      </td>
+                      {!readOnly && (
+                        <td className="px-2 py-2">
+                          <UnassignButton
+                            generationId={g.id}
+                            assignedAt={g.assigned_at}
+                            assignedBy={g.assigned_by}
+                            userRole={userRole}
+                            userId={userId}
+                            onDone={() => router.refresh()}
+                            onError={(msg) => setError(msg)}
+                          />
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -559,17 +552,19 @@ export function AssignTables({
                             : 'free'}
                         </span>
                       </td>
-                      <td className="px-2 py-2">
-                        <WastageButton
-                          generationId={g.id}
-                          wastedAt={g.wasted_at}
-                          wastedBy={g.wasted_by}
-                          userRole={userRole}
-                          userId={userId}
-                          onDone={() => router.refresh()}
-                          onError={(msg) => setError(msg)}
-                        />
-                      </td>
+                      {!readOnly && (
+                        <td className="px-2 py-2">
+                          <WastageButton
+                            generationId={g.id}
+                            wastedAt={g.wasted_at}
+                            wastedBy={g.wasted_by}
+                            userRole={userRole}
+                            userId={userId}
+                            onDone={() => router.refresh()}
+                            onError={(msg) => setError(msg)}
+                          />
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -580,6 +575,41 @@ export function AssignTables({
           )}
         </div>
       </div>
+
+      {/* IRRELEVANT */}
+      {allIrrelevant.length > 0 && (
+        <div className="bg-neutral-950 border border-neutral-700/30 rounded-lg overflow-hidden">
+          <div className="px-4 py-3 border-b border-neutral-800">
+            <h2 className="font-semibold text-neutral-500 text-sm flex items-center gap-2">
+              Irrelevant
+              <Badge variant="outline" className="text-neutral-600 border-neutral-700">
+                {allIrrelevant.length}
+              </Badge>
+            </h2>
+            <p className="text-xs text-neutral-600 mt-0.5">Practice / past work — not counted in credits</p>
+          </div>
+          <div className="overflow-auto max-h-44">
+            <table className="w-full text-xs">
+              <tbody className="divide-y divide-neutral-800/30">
+                {allIrrelevant.map((g) => (
+                  <tr key={g.id} className="opacity-40">
+                    <td className="px-2 py-1.5">
+                      <MediaPreview url={g.result_url} mediaType={g.media_type} name={g.display_name} />
+                    </td>
+                    <td className="px-2 py-1.5 text-neutral-500">{g.display_name}</td>
+                    {g.hf_connection_label && (
+                      <td className="px-2 py-1.5 text-neutral-600 text-[11px]">{g.hf_connection_label}</td>
+                    )}
+                    <td className="px-2 py-1.5 text-right text-neutral-600">
+                      {parseFloat(g.credits) > 0 ? parseFloat(g.credits).toFixed(1) : 'free'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

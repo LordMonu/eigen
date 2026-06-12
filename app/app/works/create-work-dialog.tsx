@@ -298,6 +298,13 @@ function WorkForm({
         return
       }
 
+      // Log creation (non-blocking)
+      fetch('/api/activity-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entityType: 'work', entityId: workId, action: 'created', toValue: title.trim() || null }),
+      }).catch(() => {})
+
       onOpenChange(false)
       startTransition(() => {
         router.refresh()

@@ -8,6 +8,7 @@ import { ApprovalControls } from './approval-controls'
 import { MemberControls } from './member-controls'
 import { MemberHfAccess } from './member-hf-access'
 import { InviteUserSection } from './invite-user-section'
+import { ActivityLog } from '@/components/ui/activity-log'
 
 export default async function UsersPage() {
   const membership = await requireRole(['master', 'manager'])
@@ -19,6 +20,7 @@ export default async function UsersPage() {
     { data: connections },
     { data: grants },
     { data: invitations },
+    { data: userActivityLog },
   ] = await Promise.all([
     supabase
       .from('memberships')
@@ -31,6 +33,7 @@ export default async function UsersPage() {
       .select('id, user_id, full_name, role, approved_at')
       .eq('org_id', membership.org_id)
       .eq('status', 'active')
+      .is('deleted_at', null)
       .order('approved_at', { ascending: true }),
     supabase
       .from('hf_connections')
@@ -46,6 +49,13 @@ export default async function UsersPage() {
       .select('id, email, role, created_at, used_at, connection_ids')
       .eq('org_id', membership.org_id)
       .order('created_at', { ascending: false }),
+    supabase
+      .from('activity_log')
+      .select('id, action, from_value, to_value, actor_name, created_at')
+      .eq('entity_type', 'user')
+      .eq('org_id', membership.org_id)
+      .order('created_at', { ascending: false })
+      .limit(50),
   ])
 
   const masterCount = (active || []).filter((m) => m.role === 'master').length
@@ -180,6 +190,14 @@ export default async function UsersPage() {
             )
           })}
         </div>
+      </section>
+
+      {/* ACTIVITY LOG */}
+      <section className="bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden">
+        <div className="px-4 py-3 border-b border-neutral-800">
+          <h2 className="font-semibold text-white">Activity Log</h2>
+        </div>
+        <ActivityLog entries={userActivityLog || []} />
       </section>
     </div>
   )

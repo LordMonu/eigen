@@ -106,10 +106,15 @@ export async function forEachAccessibleConnection<T>(
   orgId: string,
   userId: string,
   role: 'master' | 'manager' | 'creator',
-  fn: (accessToken: string) => Promise<T>
+  fn: (accessToken: string) => Promise<T>,
+  connectionId?: string
 ): Promise<ConnectionResult<T>[]> {
-  const conns = await listAccessibleConnections(supabase, orgId, userId, role)
+  let conns = await listAccessibleConnections(supabase, orgId, userId, role)
   if (conns.length === 0) throw new NoHFConnectionError()
+  if (connectionId) {
+    conns = conns.filter((c) => c.id === connectionId)
+    if (conns.length === 0) throw new NoHFConnectionError()
+  }
 
   return Promise.all(
     conns.map(async (c): Promise<ConnectionResult<T>> => {

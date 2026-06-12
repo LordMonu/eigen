@@ -49,6 +49,7 @@ interface WorkRpcRow {
   creator_id: string;
   client_id: string;
   credit_sum: string | number;
+  deleted_at: string | null;
 }
 
 async function WorksContent({ initialFilterStatus }: { initialFilterStatus?: string }) {
@@ -66,7 +67,7 @@ async function WorksContent({ initialFilterStatus }: { initialFilterStatus?: str
   ] = await Promise.all([
     requireActiveMembership(),
     supabase.rpc("works_with_credit_totals"),
-    supabase.from("clients").select("id, name, status").order("name"),
+    supabase.from("clients").select("id, name, status").is("deleted_at", null).order("name"),
     supabase
       .from("work_creators")
       .select("work_id, user_id, added_at")
@@ -135,6 +136,7 @@ async function WorksContent({ initialFilterStatus }: { initialFilterStatus?: str
     max_credits: w.max_credits ? parseFloat(w.max_credits) : null,
     creator_id: w.creator_id,
     client_id: w.client_id,
+    deleted_at: w.deleted_at ?? null,
   }));
 
   return (

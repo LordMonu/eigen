@@ -32,6 +32,7 @@ interface WorkData {
   max_credits: number | null
   creator_id: string
   client_id: string
+  deleted_at: string | null
 }
 
 interface Props {
@@ -165,6 +166,7 @@ export function WorksView({
                 endDate: w.end_date,
                 isLocked: isClientLocked(clientStatusMap[w.client_id]),
                 clientStatus: clientStatusMap[w.client_id] ?? null,
+                deletedAt: w.deleted_at,
               }))}
               clients={clients}
             />
@@ -175,27 +177,31 @@ export function WorksView({
                 const status = w.status as WorkStatus
                 const clientStatus = clientStatusMap[w.client_id]
                 const locked = isClientLocked(clientStatus)
-                return (
-                  <Link
-                    key={w.id}
-                    href={`/app/works/${w.id}`}
-                    className="block bg-neutral-950 border border-neutral-800 hover:border-neutral-600 rounded-lg p-4 transition-colors group"
-                  >
+                const archived = !!w.deleted_at
+
+                const cardContent = (
+                  <>
                     <div className="flex items-start justify-between gap-2 mb-2">
-                      <h3 className="font-semibold text-white group-hover:text-lime-400 truncate flex-1">
+                      <h3 className={`font-semibold truncate flex-1 ${archived ? 'text-neutral-500' : 'text-white group-hover:text-lime-400'}`}>
                         {w.title || w.video_type || 'Untitled'}
                       </h3>
-                      <span
-                        className={`text-xs px-2 py-0.5 rounded border ${WORK_STATUS_COLORS[status]} whitespace-nowrap`}
-                      >
-                        {WORK_STATUS_LABELS[status]}
-                      </span>
+                      {archived ? (
+                        <span className="text-xs px-2 py-0.5 rounded border bg-neutral-800 text-neutral-500 border-neutral-700 whitespace-nowrap">
+                          Archived
+                        </span>
+                      ) : (
+                        <span
+                          className={`text-xs px-2 py-0.5 rounded border ${WORK_STATUS_COLORS[status]} whitespace-nowrap`}
+                        >
+                          {WORK_STATUS_LABELS[status]}
+                        </span>
+                      )}
                     </div>
-                    <div className="text-sm text-neutral-400 mb-1 flex items-center gap-2 min-w-0">
+                    <div className={`text-sm mb-1 flex items-center gap-2 min-w-0 ${archived ? 'text-neutral-600' : 'text-neutral-400'}`}>
                       <span className="truncate">
                         {clientNameMap[w.client_id] || 'Unknown client'}
                       </span>
-                      {locked && (
+                      {!archived && locked && (
                         <span
                           className="inline-flex items-center gap-1 rounded-full bg-amber-950/40 border border-amber-800 px-1.5 py-0.5 text-[10px] text-amber-300 whitespace-nowrap"
                           title={`Locked — client ${clientStatus}`}
@@ -221,7 +227,7 @@ export function WorksView({
                         {formatDateRange(w.start_date, w.end_date) || 'No deadline'}
                       </div>
                       <div className="text-right">
-                        <div className="text-base font-bold text-white">
+                        <div className={`text-base font-bold ${archived ? 'text-neutral-500' : 'text-white'}`}>
                           {usedCredits.toFixed(1)}
                           {w.max_credits && (
                             <span className="text-neutral-500 text-xs">
@@ -232,6 +238,27 @@ export function WorksView({
                         <div className="text-xs text-neutral-500">credits</div>
                       </div>
                     </div>
+                  </>
+                )
+
+                if (archived) {
+                  return (
+                    <div
+                      key={w.id}
+                      className="block rounded-lg p-4 border bg-neutral-950/50 border-neutral-800/50 opacity-50 cursor-default"
+                    >
+                      {cardContent}
+                    </div>
+                  )
+                }
+
+                return (
+                  <Link
+                    key={w.id}
+                    href={`/app/works/${w.id}`}
+                    className="block bg-neutral-950 border border-neutral-800 hover:border-neutral-600 rounded-lg p-4 transition-colors group"
+                  >
+                    {cardContent}
                   </Link>
                 )
               })}

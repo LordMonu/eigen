@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase-browser'
 import { Button } from '@/components/ui/button'
 import {
   AlertDialog,
@@ -19,9 +18,10 @@ import {
 interface Props {
   clientId: string
   clientName: string
+  isDefault?: boolean
 }
 
-export function DeleteClientButton({ clientId, clientName }: Props) {
+export function DeleteClientButton({ clientId, clientName, isDefault = false }: Props) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [isPending, startTransition] = useTransition()
@@ -30,10 +30,10 @@ export function DeleteClientButton({ clientId, clientName }: Props) {
   async function handleDelete() {
     setBusy(true)
     setError(null)
-    const supabase = createClient()
-    const { error } = await supabase.from('clients').delete().eq('id', clientId)
-    if (error) {
-      setError(error.message)
+    const res = await fetch(`/api/clients/${clientId}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      setError(data.error || 'Delete failed')
       setBusy(false)
       return
     }
@@ -41,7 +41,17 @@ export function DeleteClientButton({ clientId, clientName }: Props) {
       router.push('/app/clients')
       router.refresh()
     })
-    setBusy(false)
+  }
+
+  if (isDefault) {
+    return (
+      <div className="space-y-2">
+        <Button variant="destructive" className="bg-neutral-800 text-neutral-500 cursor-not-allowed" disabled>
+          Archive Client
+        </Button>
+        <p className="text-neutral-600 text-xs">R&D client cannot be archived</p>
+      </div>
+    )
   }
 
   return (
@@ -52,17 +62,17 @@ export function DeleteClientButton({ clientId, clientName }: Props) {
             <Button variant="destructive" className="bg-red-700 hover:bg-red-600 text-white" />
           }
         >
-          Delete Client
+          Archive Client
         </AlertDialogTrigger>
         <AlertDialogContent className="bg-neutral-950 border-neutral-800">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white">
-              Delete {clientName}?
+              Archive {clientName}?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-neutral-400">
-              This permanently deletes the client. All generations assigned to it
-              will be unassigned (their client_id becomes NULL) and reappear in
-              the unassigned table. This action cannot be undone.
+              This archives the client and all its works. All assigned credits
+              and generations will remain allocated. The client will appear
+              greyed out in lists.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -72,12 +82,12 @@ export function DeleteClientButton({ clientId, clientName }: Props) {
               disabled={busy || isPending}
               className="bg-red-700 hover:bg-red-600 text-white"
             >
-              {busy ? 'Deleting…' : isPending ? 'Updating…' : 'Delete'}
+              {busy ? 'Archiving…' : isPending ? 'Updating…' : 'Archive'}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {error && <p className="text-red-400 text-sm">Delete failed: {error}</p>}
+      {error && <p className="text-red-400 text-sm">Archive failed: {error}</p>}
     </div>
   )
 }

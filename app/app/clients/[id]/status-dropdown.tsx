@@ -79,6 +79,13 @@ export function StatusDropdown({ clientId, currentStatus }: Props) {
           `[status-dropdown] cascade updated ${worksAffected} work(s)`,
         )
       }
+      // Log the status change (non-blocking, best-effort)
+      fetch('/api/activity-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entityType: 'client', entityId: clientId, action: 'status_changed', fromValue: prev, toValue: newStatus }),
+      }).catch(() => {})
+
       startTransition(() => {
         router.refresh()
       })

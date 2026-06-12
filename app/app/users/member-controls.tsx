@@ -79,6 +79,11 @@ export function MemberControls({
         setError(err.message)
         setRole(currentRole) // revert
       } else {
+        fetch('/api/activity-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entityType: 'user', entityId: membershipId, action: 'edited', fromValue: currentRole, toValue: next }),
+        }).catch(() => {})
         startTransition(() => {
           router.refresh()
         })
@@ -101,11 +106,16 @@ export function MemberControls({
       const supabase = createClient()
       const { error: err } = await supabase
         .from('memberships')
-        .delete()
+        .update({ deleted_at: new Date().toISOString() })
         .eq('id', membershipId)
       if (err) {
         setError(err.message)
       } else {
+        fetch('/api/activity-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entityType: 'user', entityId: membershipId, action: 'archived', fromValue: currentRole, toValue: null }),
+        }).catch(() => {})
         startTransition(() => {
           router.refresh()
         })
@@ -170,8 +180,8 @@ export function MemberControls({
               </AlertDialogTitle>
               <AlertDialogDescription className="text-neutral-400">
                 {isYou
-                  ? 'This will remove YOUR access to the org. You can rejoin later if someone re-invites you.'
-                  : `${fullName} will lose access to the org. They can request to rejoin later.`}
+                  ? 'This will remove YOUR access to the org. All your assigned credits will remain allocated. You can rejoin later if someone re-invites you.'
+                  : `${fullName} will lose access to the org. All their assigned credits will remain allocated. They can request to rejoin later.`}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>

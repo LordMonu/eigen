@@ -59,16 +59,16 @@ export function DeleteWorkButton({ workId, workTitle }: Props) {
         }
       >
         <Trash2 className="size-4 mr-1" />
-        Delete
+        Archive
       </AlertDialogTrigger>
       <AlertDialogContent className="bg-neutral-950 border-neutral-800">
         <AlertDialogHeader>
           <AlertDialogTitle className="text-white">
-            Delete &ldquo;{workTitle}&rdquo;?
+            Archive &ldquo;{workTitle}&rdquo;?
           </AlertDialogTitle>
           <AlertDialogDescription className="text-neutral-400">
-            Generations assigned to this work will be unassigned (work_id → null).
-            This cannot be undone.
+            This archives the work. All assigned credits and generations will
+            remain allocated. The work will appear greyed out in lists.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
@@ -78,7 +78,7 @@ export function DeleteWorkButton({ workId, workTitle }: Props) {
             disabled={disabled}
             className="bg-red-700 hover:bg-red-600 text-white"
           >
-            {disabled ? 'Deleting…' : 'Delete Work'}
+            {disabled ? 'Archiving…' : 'Archive Work'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

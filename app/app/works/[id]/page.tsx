@@ -22,6 +22,7 @@ import { SyncAndAssign } from "./sync-and-assign";
 import { InstructionsButton } from "./instructions-button";
 import { ScheduleCalendar } from "./schedule-calendar";
 import { WorkActions } from "./work-actions";
+import { ActivityLog } from "@/components/ui/activity-log";
 
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 // Cap on rows passed to AssignTables (which paginates client-side at 50/page).
@@ -63,7 +64,7 @@ async function WorkDetailContent({ id }: { id: string }) {
     supabase
       .from("works")
       .select(
-        "id, title, video_type, status, start_date, end_date, start_time, end_time, max_credits, client_id, creator_id, instructions_path, notes",
+        "id, title, video_type, status, start_date, end_date, start_time, end_time, max_credits, client_id, creator_id, instructions_path, notes, deleted_at",
       )
       .eq("id", id)
       .maybeSingle(),
@@ -84,10 +85,11 @@ async function WorkDetailContent({ id }: { id: string }) {
     { data: allMemberships },
     { data: clientWorks },
     { data: hfConns },
+    { data: activityLogEntries },
   ] = await Promise.all([
     supabase
       .from("clients")
-      .select("id, name, status")
+      .select("id, name, status, deleted_at")
       .eq("id", work.client_id)
       .maybeSingle(),
     supabase
@@ -98,7 +100,7 @@ async function WorkDetailContent({ id }: { id: string }) {
     supabase
       .from("generations")
       .select(
-        "id, display_name, result_url, media_type, credits, hf_created_at, work_id, assigned_at, assigned_by, is_waste, wasted_at, wasted_by, hf_connection_label",
+        "id, display_name, result_url, media_type, credits, hf_created_at, work_id, assigned_at, assigned_by, is_waste, is_irrelevant, wasted_at, wasted_by, hf_connection_label",
       )
       .eq("client_id", work.client_id)
       .order("hf_created_at", { ascending: false })
@@ -117,9 +119,16 @@ async function WorkDetailContent({ id }: { id: string }) {
     supabase.from("works").select("id, status").eq("client_id", work.client_id),
     supabase
       .from("hf_connections")
-      .select("label")
+      .select("id, label")
       .eq("is_active", true)
       .order("created_at", { ascending: true }),
+    supabase
+      .from("activity_log")
+      .select("id, action, from_value, to_value, actor_name, created_at")
+      .eq("entity_type", "work")
+      .eq("entity_id", work.id)
+      .order("created_at", { ascending: false })
+      .limit(50),
   ]);
 
   const additionalCreatorIds = (workCreators || [])
@@ -141,7 +150,7 @@ async function WorkDetailContent({ id }: { id: string }) {
     (clientWorks || []).map((w) => [w.id, w.status as WorkStatus]),
   );
 
-  const accountLabels = (hfConns as { label: string }[] || []).map((c) => c.label);
+  const accounts = ((hfConns as { id: string; label: string }[]) || []).map((c) => ({ id: c.id, label: c.label }));
 
   // creatorStats comes directly from the RPC — no JS reduce loop.
   const creatorStats = (
@@ -179,12 +188,14 @@ async function WorkDetailContent({ id }: { id: string }) {
       instructionsFileContent = await (instructionsBlob as Blob).text();
     }
   }
-  const canEdit = can(
+  const isClientArchived = !!client?.deleted_at;
+  const isArchived = !!work.deleted_at || isClientArchived;
+  const canEdit = !isArchived && can(
     membership.role as "master" | "manager" | "creator",
     "works",
     "edit",
   );
-  const canDelete = can(
+  const canDelete = !isArchived && can(
     membership.role as "master" | "manager" | "creator",
     "works",
     "delete",
@@ -195,8 +206,22 @@ async function WorkDetailContent({ id }: { id: string }) {
 
   return (
     <>
+      {/* ARCHIVED BANNER */}
+      {isArchived && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg bg-neutral-900 border border-neutral-700 px-4 py-3">
+          <span className="text-xs px-2 py-0.5 rounded border bg-neutral-800 text-neutral-400 border-neutral-700">
+            Archived
+          </span>
+          <span className="text-sm text-neutral-400">
+            {isClientArchived && !work.deleted_at
+              ? <>This work is read-only because client <Link href={`/app/clients/${work.client_id}`} className="text-neutral-300 underline underline-offset-2">{client?.name}</Link> has been archived.</>
+              : "This work has been archived. All data is read-only."}
+          </span>
+        </div>
+      )}
+
       {/* CLIENT-LOCK BANNER */}
-      {clientLocked && (
+      {!isArchived && clientLocked && (
         <div className="mb-4 flex items-start gap-2 rounded-lg bg-amber-950/40 border border-amber-800 px-4 py-2 text-sm text-amber-300">
           <Lock className="size-4 shrink-0 mt-0.5" />
           <p className="leading-relaxed">
@@ -256,7 +281,7 @@ async function WorkDetailContent({ id }: { id: string }) {
             fileContent={instructionsFileContent}
             notes={work.notes}
           />
-          {(() => {
+          {!isArchived && (() => {
             if (clientLocked) {
               return (
                 <StatusActionButtons
@@ -357,7 +382,8 @@ async function WorkDetailContent({ id }: { id: string }) {
           clientName={client?.name || ""}
           userRole={membership.role as "master" | "manager" | "creator"}
           creatorStats={creatorStats}
-          accountLabels={accountLabels}
+          accounts={accounts}
+          readOnly={isArchived}
         />
       </div>
 
@@ -393,8 +419,17 @@ async function WorkDetailContent({ id }: { id: string }) {
         workStatusMap={workStatusMap}
         userRole={membership.role as "master" | "manager" | "creator"}
         userId={membership.user_id}
-        accountLabels={accountLabels}
+        accounts={accounts}
+        readOnly={isArchived}
       />
+
+      {/* ACTIVITY LOG */}
+      <section className="bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden mt-6">
+        <div className="px-4 py-3 border-b border-neutral-800">
+          <h2 className="font-semibold text-white text-sm">Activity</h2>
+        </div>
+        <ActivityLog entries={(activityLogEntries || []) as { id: string; action: string; from_value: string | null; to_value: string | null; actor_name: string; created_at: string }[]} />
+      </section>
     </>
   );
 }

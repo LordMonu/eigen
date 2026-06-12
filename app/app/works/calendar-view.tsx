@@ -33,6 +33,8 @@ interface WorkItem {
   isLocked?: boolean
   /** The client's actual status — for the tooltip on the lock icon. */
   clientStatus?: string | null
+  /** Archived timestamp — if present, work is archived. */
+  deletedAt?: string | null
 }
 
 export interface CalendarClient {
@@ -260,11 +262,13 @@ export function CalendarView({ works, clients }: Props) {
                     <Link
                       key={w.id}
                       href={`/app/works/${w.id}`}
-                      className={`flex items-center gap-1 text-[10px] leading-tight px-1 py-0.5 rounded truncate border ${WORK_STATUS_COLORS[w.status]} hover:opacity-80 transition-opacity ${continuity}`}
+                      className={`flex items-center gap-1 text-[10px] leading-tight px-1 py-0.5 rounded truncate border ${WORK_STATUS_COLORS[w.status]} hover:opacity-80 transition-opacity ${continuity} ${w.deletedAt ? 'opacity-60 bg-gradient-to-r from-neutral-800/40 via-transparent to-neutral-800/40' : ''}`}
                       title={
-                        w.isLocked
-                          ? `Locked — client ${w.clientStatus ?? 'paused/ended'}`
-                          : undefined
+                        w.deletedAt
+                          ? 'Archived'
+                          : w.isLocked
+                            ? `Locked — client ${w.clientStatus ?? 'paused/ended'}`
+                            : undefined
                       }
                     >
                       {prevHas && (
@@ -314,9 +318,11 @@ export function CalendarView({ works, clients }: Props) {
               <Link
                 key={w.id}
                 href={`/app/works/${w.id}`}
-                className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border ${WORK_STATUS_COLORS[w.status]} hover:opacity-80 transition-opacity`}
+                className={`inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded border ${WORK_STATUS_COLORS[w.status]} hover:opacity-80 transition-opacity ${w.deletedAt ? 'opacity-60 bg-gradient-to-r from-neutral-800/40 via-transparent to-neutral-800/40' : ''}`}
                 title={
-                  w.isLocked
+                  w.deletedAt
+                    ? 'Archived'
+                    : w.isLocked
                     ? `Locked — client ${w.clientStatus ?? 'paused/ended'}`
                     : undefined
                 }
@@ -366,17 +372,17 @@ export function CalendarView({ works, clients }: Props) {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-white group-hover:text-lime-400 transition-colors truncate">
+                      <div className={`font-medium transition-colors truncate ${w.deletedAt ? 'text-neutral-500' : 'text-white group-hover:text-lime-400'}`}>
                         {w.title || 'Untitled'}
                       </div>
-                      <div className="text-sm text-neutral-400 mt-1">
+                      <div className={`mt-1 ${w.deletedAt ? 'text-neutral-600' : 'text-neutral-400'}`}>
                         {w.clientName}
                       </div>
                     </div>
                     <span
-                      className={`text-xs px-2 py-1 rounded border shrink-0 ${WORK_STATUS_COLORS[w.status]}`}
+                      className={`text-xs px-2 py-1 rounded border shrink-0 ${w.deletedAt ? 'bg-neutral-800 text-neutral-500 border-neutral-700' : WORK_STATUS_COLORS[w.status]} ${w.deletedAt ? 'bg-gradient-to-r from-neutral-800/60 via-transparent to-neutral-800/60' : ''}`}
                     >
-                      {w.status.replace(/_/g, ' ')}
+                      {w.deletedAt ? 'Archived' : w.status.replace(/_/g, ' ')}
                     </span>
                   </div>
                 </Link>

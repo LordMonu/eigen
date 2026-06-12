@@ -32,6 +32,7 @@ import {
   type WorkReportRow,
   type WorkUserStat,
 } from "./work-user-report";
+import { ActivityLog } from "@/components/ui/activity-log";
 
 const WORK_ALLOWED_STATUSES: ClientStatus[] = ["trial", "ongoing", "in_talk"];
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
@@ -138,7 +139,7 @@ async function ClientDetailContent({
     requireActiveMembership(),
     supabase
       .from("clients")
-      .select("id, name, industry, status")
+      .select("id, name, industry, status, deleted_at, is_default")
       .eq("id", id)
       .maybeSingle(),
   ]);
@@ -156,6 +157,7 @@ async function ClientDetailContent({
     { data: clientWorkCreators },
     { data: allMembers },
     { data: hfConns },
+    { data: activityLogEntries },
   ] = await Promise.all([
     supabase.rpc("client_credit_summary", {
       p_client_id: id,
@@ -173,7 +175,7 @@ async function ClientDetailContent({
       let q = supabase
         .from("generations")
         .select(
-          "id, display_name, result_url, media_type, credits, hf_created_at, work_id, assigned_at, assigned_by, is_waste, wasted_at, wasted_by, hf_connection_label",
+          "id, display_name, result_url, media_type, credits, hf_created_at, work_id, assigned_at, assigned_by, is_waste, is_irrelevant, wasted_at, wasted_by, hf_connection_label",
         )
         .eq("client_id", id)
         .order("hf_created_at", { ascending: false })
@@ -189,9 +191,16 @@ async function ClientDetailContent({
     supabase.from("memberships").select("user_id, full_name"),
     supabase
       .from("hf_connections")
-      .select("label")
+      .select("id, label")
       .eq("is_active", true)
       .order("created_at", { ascending: true }),
+    supabase
+      .from("activity_log")
+      .select("id, action, from_value, to_value, actor_name, created_at")
+      .eq("entity_type", "client")
+      .eq("entity_id", id)
+      .order("created_at", { ascending: false })
+      .limit(50),
   ]);
 
   if (worksRpcError) {
@@ -260,7 +269,7 @@ async function ClientDetailContent({
     (allMembers || []).map((u) => [u.user_id, u.full_name]),
   );
 
-  const accountLabels = (hfConns as { label: string }[] || []).map((c) => c.label);
+  const accounts = ((hfConns as { id: string; label: string }[]) || []).map((c) => ({ id: c.id, label: c.label }));
 
   // Build the WorkUserReport rows.
   const reportRows: WorkReportRow[] = worksFromRpc.map((w) => {
@@ -303,10 +312,11 @@ async function ClientDetailContent({
     creatorIdsByWork.set(w.id, [w.creator_id, ...others]);
   });
 
+  const isArchived = !!client.deleted_at;
   const status = client.status as ClientStatus;
-  const canEdit = can(membership.role, "clients", "edit");
-  const canDelete = can(membership.role, "clients", "delete");
-  const canCreateWork = can(membership.role, "works", "create");
+  const canEdit = !isArchived && can(membership.role, "clients", "edit");
+  const canDelete = !isArchived && can(membership.role, "clients", "delete");
+  const canCreateWork = !isArchived && can(membership.role, "works", "create");
   const isWorkAllowedStatus = WORK_ALLOWED_STATUSES.includes(status);
   const showCreateWork = canCreateWork && isWorkAllowedStatus;
 
@@ -317,8 +327,18 @@ async function ClientDetailContent({
 
   return (
     <>
+      {isArchived && (
+        <div className="bg-neutral-900 border border-neutral-700 rounded-lg px-4 py-3 mb-4 flex items-center gap-2">
+          <span className="text-xs px-2 py-0.5 rounded border bg-neutral-800 text-neutral-400 border-neutral-700">
+            Archived
+          </span>
+          <span className="text-sm text-neutral-400">
+            This client has been archived. All data is read-only.
+          </span>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-4 mb-2">
-        <h1 className="text-3xl font-bold text-white">{client.name}</h1>
+        <h1 className={`text-3xl font-bold ${isArchived ? 'text-neutral-500' : 'text-white'}`}>{client.name}</h1>
         <div className="flex items-center gap-2">
           {canEdit ? (
             <StatusDropdown clientId={client.id} currentStatus={status} />
@@ -534,7 +554,7 @@ async function ClientDetailContent({
         workTitles={workTitles}
         userRole={membership.role as "master" | "manager" | "creator"}
         userId={membership.user_id}
-        accountLabels={accountLabels}
+        accounts={accounts}
       />
 
       {canDelete && (
@@ -543,12 +563,20 @@ async function ClientDetailContent({
             Danger zone
           </h2>
           <p className="text-neutral-400 text-sm mb-3">
-            Deleting this client also deletes all its works and unassigns its
-            generations.
+            Archiving this client also archives all its works. All assigned
+            credits and generations will remain allocated.
           </p>
-          <DeleteClientButton clientId={client.id} clientName={client.name} />
+          <DeleteClientButton clientId={client.id} clientName={client.name} isDefault={!!(client as { is_default?: boolean }).is_default} />
         </section>
       )}
+
+      {/* ACTIVITY LOG */}
+      <section className="bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden mt-6">
+        <div className="px-4 py-3 border-b border-neutral-800">
+          <h2 className="font-semibold text-white text-sm">Activity</h2>
+        </div>
+        <ActivityLog entries={(activityLogEntries || []) as { id: string; action: string; from_value: string | null; to_value: string | null; actor_name: string; created_at: string }[]} />
+      </section>
     </>
   );
 }

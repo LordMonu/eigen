@@ -189,12 +189,12 @@ function ClientForm({
       if (!membership) throw new Error('No active organization')
 
       if (mode === 'create') {
-        const { error: insertError } = await supabase.from('clients').insert({
+        const { data: inserted, error: insertError } = await supabase.from('clients').insert({
           org_id: membership.org_id,
           name: name.trim(),
           industry: industry.trim() || null,
           status,
-        })
+        }).select('id').maybeSingle()
         if (insertError) {
           if (
             insertError.message.includes('duplicate') ||
@@ -206,6 +206,13 @@ function ClientForm({
           }
           throw insertError
         }
+        if (inserted?.id) {
+          fetch('/api/activity-log', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ entityType: 'client', entityId: inserted.id, action: 'created', toValue: name.trim() }),
+          }).catch(() => {})
+        }
       } else if (mode === 'edit' && initialData) {
         const { error: updateError } = await supabase
           .from('clients')
@@ -216,6 +223,11 @@ function ClientForm({
           })
           .eq('id', initialData.id)
         if (updateError) throw updateError
+        fetch('/api/activity-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ entityType: 'client', entityId: initialData.id, action: 'edited', toValue: name.trim() }),
+        }).catch(() => {})
       }
 
       onOpenChange(false)
