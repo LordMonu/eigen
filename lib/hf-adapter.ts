@@ -286,7 +286,7 @@ export async function fetchHFGenerations(
 ): Promise<Generation[]> {
   // Both endpoints are cursor-paginated newest-first. In incremental mode the
   // paginator stops as soon as it crosses sinceMs (see fetchAllPages).
-  const [jobs, allTx] = await Promise.all([
+  const [allJobs, allTx] = await Promise.all([
     fetchAllPages<HFJob>('/agents/jobs', accessToken, {
       sinceMs,
       timeOf: (j) => j.created_at * 1000,
@@ -297,6 +297,9 @@ export async function fetchHFGenerations(
     }),
   ])
 
+  // Only completed jobs — failed/cancelled don't produce usable output.
+  const jobs = allJobs.filter((j) => j.status === 'completed')
+
   // NET credit per generation = gross spend − refunds, attributed by NORMALIZED
   // name so transaction/job name-format differences don't drop credits. This
   // makes the org total match Higgsfield's net "credits spent" (gross − refunds).
@@ -305,9 +308,6 @@ export async function fetchHFGenerations(
   const spendByJob = attributeToJobs(jobs, spend)
   const refundByJob = attributeToJobs(jobs, refunds)
 
-  // Keep EVERY job — completed, failed, in-progress, canceled — so the synced
-  // count matches Higgsfield. Jobs are already file-level (batch_size makes
-  // separate job rows). Non-completed jobs may have no result_url / no spend.
   const jobGens: Generation[] = jobs.map((job, idx) => ({
     externalId: job.id,
     displayName: job.display_name,
