@@ -17,6 +17,13 @@ export async function POST(req: Request) {
   try {
     const body = await req.json().catch(() => ({}))
     const connectionId: string | undefined = body.connectionId || undefined
+    // full: true re-walks the entire history (used once to rebuild credits with
+    // the wider match window). Default is incremental — only the recent tail.
+    const full: boolean = body.full === true
+
+    // Re-fetch this much history before the newest stored generation so spend
+    // transactions that posted after a job's first sync still get matched.
+    const OVERLAP_MS = 2 * 60 * 60 * 1000
 
     const supabase = await createClient()
     const {
@@ -46,7 +53,25 @@ export async function POST(req: Request) {
       membership.org_id,
       user.id,
       role,
-      (token) => fetchHFGenerations(token),
+      async (token, conn) => {
+        let sinceMs: number | undefined
+        if (!full) {
+          // Newest generation already stored for this connection → only pull
+          // what's newer (minus the overlap). Empty = first sync = full pull.
+          const { data: latest } = await supabase
+            .from('generations')
+            .select('hf_created_at')
+            .eq('hf_connection_id', conn.id)
+            .order('hf_created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+          if (latest?.hf_created_at) {
+            sinceMs =
+              new Date(latest.hf_created_at as string).getTime() - OVERLAP_MS
+          }
+        }
+        return fetchHFGenerations(token, sinceMs)
+      },
       connectionId
     )
 
@@ -78,7 +103,9 @@ export async function POST(req: Request) {
         message:
           accountErrors.length > 0
             ? `Sync failed: ${accountErrors.join('; ')}`
-            : 'No generations found',
+            : full
+              ? 'No generations found'
+              : 'Already up to date — no new generations',
         errors: accountErrors,
       })
     }
@@ -97,7 +124,7 @@ export async function POST(req: Request) {
       synced: rows.length,
       accounts: results.length,
       message:
-        `Synced ${rows.length} generations from ${results.length} account${results.length === 1 ? '' : 's'}` +
+        `${full ? 'Full re-sync' : 'Synced'} ${rows.length} ${full ? '' : 'new/updated '}generation${rows.length === 1 ? '' : 's'} from ${results.length} account${results.length === 1 ? '' : 's'}` +
         (accountErrors.length > 0
           ? ` (errors: ${accountErrors.join('; ')})`
           : ''),

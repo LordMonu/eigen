@@ -64,6 +64,17 @@ export function MediaPreview({
   mediaType: string
   name: string
 }) {
+  // Feature charges (voiceover, voice change, etc.) have no media URL.
+  if (mediaType === 'feature' || !url) {
+    return (
+      <div
+        className="w-14 h-10 rounded bg-neutral-800 border border-neutral-700 flex items-center justify-center text-[9px] text-neutral-500 uppercase tracking-wide"
+        title={name}
+      >
+        feat
+      </div>
+    )
+  }
   if (mediaType === 'video') {
     return (
       <video

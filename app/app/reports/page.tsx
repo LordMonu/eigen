@@ -1,6 +1,7 @@
 // app/app/reports/page.tsx — the north-star report (master/manager only).
 import { requireRole } from '@/lib/auth-helpers'
 import { createClient } from '@/lib/supabase-server'
+import { fetchAllRows } from '@/lib/fetch-all-rows'
 import Link from 'next/link'
 import { DateRangeFilter } from './date-range-filter'
 import { FilterSection, type ClientRow, type ModelRow, type VideoTypeRow, type IndustryRow, type WastageRow } from './filter-section'
@@ -37,16 +38,19 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   const fromDate = params.from || thirtyDaysAgo.toISOString().split('T')[0]
   const toDate = params.to || today.toISOString().split('T')[0]
 
-  const [{ data: generations }, { data: clients }, { data: works }, { data: memberships }, { data: clientActivity }, { data: workActivity }] =
+  const [generations, { data: clients }, { data: works }, { data: memberships }, { data: clientActivity }, { data: workActivity }] =
     await Promise.all([
-      supabase
-        .from('generations')
-        .select(
-          'id, display_name, result_url, media_type, credits, client_id, work_id, hf_created_at, assigned_by, is_waste, is_irrelevant, wasted_by'
-        )
-        .gte('hf_created_at', `${fromDate}T00:00:00Z`)
-        .lte('hf_created_at', `${toDate}T23:59:59Z`)
-        .order('hf_created_at', { ascending: false }),
+      fetchAllRows((from, to) =>
+        supabase
+          .from('generations')
+          .select(
+            'id, display_name, result_url, media_type, credits, client_id, work_id, hf_created_at, assigned_by, is_waste, is_irrelevant, wasted_by'
+          )
+          .gte('hf_created_at', `${fromDate}T00:00:00Z`)
+          .lte('hf_created_at', `${toDate}T23:59:59Z`)
+          .order('hf_created_at', { ascending: false })
+          .range(from, to)
+      ),
       supabase.from('clients').select('id, name, industry'),
       supabase.from('works').select('id, title, video_type, creator_id, client_id, status, end_date, updated_at'),
       supabase

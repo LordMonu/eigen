@@ -71,10 +71,11 @@ async function listAccessibleConnections(
 async function callWithRefresh<T>(
   supabase: SupabaseClient,
   conn: ConnRow,
-  fn: (accessToken: string) => Promise<T>
+  fn: (accessToken: string, conn: { id: string; label: string }) => Promise<T>
 ): Promise<T> {
+  const meta = { id: conn.id, label: conn.label }
   try {
-    return await fn(decrypt(conn.access_token_enc))
+    return await fn(decrypt(conn.access_token_enc), meta)
   } catch (err) {
     if (!(err instanceof HFUnauthorizedError)) throw err
     const tokens = await refreshTokens(decrypt(conn.refresh_token_enc))
@@ -84,7 +85,7 @@ async function callWithRefresh<T>(
       p_refresh_enc: encrypt(tokens.refresh_token),
       p_expires_at: expiresAtFrom(tokens),
     })
-    return await fn(tokens.access_token)
+    return await fn(tokens.access_token, meta)
   }
 }
 
@@ -106,7 +107,7 @@ export async function forEachAccessibleConnection<T>(
   orgId: string,
   userId: string,
   role: 'master' | 'manager' | 'creator',
-  fn: (accessToken: string) => Promise<T>,
+  fn: (accessToken: string, conn: { id: string; label: string }) => Promise<T>,
   connectionId?: string
 ): Promise<ConnectionResult<T>[]> {
   let conns = await listAccessibleConnections(supabase, orgId, userId, role)

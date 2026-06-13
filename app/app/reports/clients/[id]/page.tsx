@@ -1,5 +1,6 @@
 import { requireRole } from '@/lib/auth-helpers'
 import { createClient } from '@/lib/supabase-server'
+import { fetchAllRows } from '@/lib/fetch-all-rows'
 import Link from 'next/link'
 import { WorksView, type WorkRow, type WorkGenItem } from './works-view'
 
@@ -40,15 +41,19 @@ export default async function ClientReportPage({ params, searchParams }: PagePro
   }
 
   const workIds = (works || []).map((w) => w.id)
-  const { data: generations } = workIds.length > 0
-    ? await supabase
-        .from('generations')
-        .select('id, work_id, display_name, credits, is_waste, is_irrelevant, hf_created_at, assigned_at')
-        .in('work_id', workIds)
-        .gte('hf_created_at', `${fromDate}T00:00:00Z`)
-        .lte('hf_created_at', `${toDate}T23:59:59Z`)
-        .order('hf_created_at', { ascending: false })
-    : { data: [] }
+  const generations = workIds.length > 0
+    ? await fetchAllRows((from, to) =>
+        supabase
+          .from('generations')
+          .select('id, work_id, display_name, credits, is_waste, is_irrelevant, hf_created_at, assigned_at')
+          .in('work_id', workIds)
+          .gte('hf_created_at', `${fromDate}T00:00:00Z`)
+          .lte('hf_created_at', `${toDate}T23:59:59Z`)
+          .order('hf_created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .range(from, to)
+      )
+    : []
 
   const memberMap = new Map((memberships || []).map((m) => [m.user_id, m.full_name]))
   const reworkWorkIds = new Set((works || []).filter((w) => w.status === 'rework').map((w) => w.id))

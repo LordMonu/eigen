@@ -3,6 +3,7 @@
 import { Suspense } from 'react'
 import { requireActiveMembership } from '@/lib/auth-helpers'
 import { createClient } from '@/lib/supabase-server'
+import { fetchAllRows } from '@/lib/fetch-all-rows'
 import { can } from '@/lib/rbac'
 import { type ClientStatus } from '@/lib/client-helpers'
 import {
@@ -38,13 +39,19 @@ async function DashboardContent() {
   const isCreator = membership.role === 'creator'
 
   const [
-    { data: generations },
+    generations,
     { data: clients },
     { data: works },
     { data: memberships },
     { data: myWorkRows },
   ] = await Promise.all([
-    supabase.from('generations').select('credits, client_id, work_id'),
+    fetchAllRows((from, to) =>
+      supabase
+        .from('generations')
+        .select('credits, client_id, work_id')
+        .order('id')
+        .range(from, to),
+    ),
     supabase.from('clients').select('id, name, status'),
     supabase
       .from('works')

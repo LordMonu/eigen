@@ -84,6 +84,7 @@ export default function SyncPage() {
   const [unassigned, setUnassigned] = useState<Generation[]>([]);
   const [assigned, setAssigned] = useState<Generation[]>([]);
   const [wasted, setWasted] = useState<Generation[]>([]);
+  const [irrelevant, setIrrelevant] = useState<Generation[]>([]);
   const [rowChoices, setRowChoices] = useState<Record<string, RowChoice>>({});
   const [rowBusy, setRowBusy] = useState<
     Record<string, "assign" | "waste" | "irrelevant" | null>
@@ -102,6 +103,7 @@ export default function SyncPage() {
   const [unassignedPage, setUnassignedPage] = useState(1);
   const [assignedPage, setAssignedPage] = useState(1);
   const [wastedPage, setWastedPage] = useState(1);
+  const [irrelevantPage, setIrrelevantPage] = useState(1);
 
   const [, startTransition] = useTransition();
   const [supabase] = useState(() => createClient());
@@ -171,37 +173,54 @@ export default function SyncPage() {
 
   const loadData = useCallback(async () => {
     const accountLabel = selectedAccount?.label;
-    const [{ data: clientData }, { data: workData }, { data: gens }] =
-      await Promise.all([
-        supabase.from("clients").select("id, name, industry").order("name"),
-        supabase
-          .from("works")
-          .select("id, title, video_type, client_id, status")
-          .order("created_at", { ascending: false }),
-        (() => {
-          let q = supabase
-            .from("generations")
-            .select(
-              "id, external_id, display_name, job_set_type, result_url, media_type, prompt, credits, hf_created_at, client_id, work_id, assigned_at, assigned_by, is_waste, is_irrelevant, wasted_at, wasted_by, hf_connection_label",
-            )
-            .order("hf_created_at", { ascending: false })
-            .limit(5000);
-          if (accountLabel) {
-            q = q.eq("hf_connection_label", accountLabel);
-          }
-          return q;
-        })(),
-      ]);
+
+    // PostgREST caps every SELECT at ~1000 rows per request, so walk the table
+    // in 1000-row batches via .range() until a short page signals the end.
+    // This pulls the FULL history (e.g. 13k+ generations) into the client,
+    // where paginate() then slices it into 50-per-page views.
+    async function fetchAllGenerations(): Promise<Generation[]> {
+      const BATCH = 1000;
+      const cols =
+        "id, external_id, display_name, job_set_type, result_url, media_type, prompt, credits, hf_created_at, client_id, work_id, assigned_at, assigned_by, is_waste, is_irrelevant, wasted_at, wasted_by, hf_connection_label";
+      const out: Generation[] = [];
+      for (let from = 0; ; from += BATCH) {
+        let q = supabase
+          .from("generations")
+          .select(cols)
+          .order("hf_created_at", { ascending: false })
+          .order("id", { ascending: false }) // stable tiebreak across batches
+          .range(from, from + BATCH - 1);
+        if (accountLabel) {
+          q = q.eq("hf_connection_label", accountLabel);
+        }
+        const { data, error } = await q;
+        if (error || !data || data.length === 0) break;
+        out.push(...(data as Generation[]));
+        if (data.length < BATCH) break;
+      }
+      return out;
+    }
+
+    const [{ data: clientData }, { data: workData }, gens] = await Promise.all([
+      supabase.from("clients").select("id, name, industry").order("name"),
+      supabase
+        .from("works")
+        .select("id, title, video_type, client_id, status")
+        .order("created_at", { ascending: false }),
+      fetchAllGenerations(),
+    ]);
 
     setClients(clientData || []);
     setWorks((workData || []) as Work[]);
-    const all = (gens || []) as Generation[];
+    const all = gens;
     setUnassigned(all.filter((g) => !g.client_id && !g.is_irrelevant));
     setAssigned(all.filter((g) => g.client_id && !g.is_waste && !g.is_irrelevant));
     setWasted(all.filter((g) => g.is_waste && !g.is_irrelevant));
+    setIrrelevant(all.filter((g) => g.is_irrelevant));
     setUnassignedPage(1);
     setAssignedPage(1);
     setWastedPage(1);
+    setIrrelevantPage(1);
   }, [supabase, selectedAccount?.label]);
 
   useEffect(() => {
@@ -217,7 +236,7 @@ export default function SyncPage() {
     }
   }, [selectedAccountId, loadData]);
 
-  async function syncSelectedAccount(force = false) {
+  async function syncSelectedAccount(force = false, full = false) {
     if (!selectedAccountId) return;
     if (!force && isCooldownActive(selectedAccountId)) return;
 
@@ -228,7 +247,7 @@ export default function SyncPage() {
       const res = await fetch("/api/hf-sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ connectionId: selectedAccountId }),
+        body: JSON.stringify({ connectionId: selectedAccountId, full }),
       });
       const data = await res.json();
       if (res.status === 409) {
@@ -353,6 +372,30 @@ export default function SyncPage() {
     }
   }
 
+  async function handleUnmarkIrrelevant(gen: Generation) {
+    setRowError(null);
+    setRowBusy((prev) => ({ ...prev, [gen.id]: "irrelevant" }));
+    try {
+      const res = await fetch(`/api/generations/${gen.id}/irrelevant`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ is_irrelevant: false }),
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}));
+        setRowError(`Failed: ${d?.error || res.statusText}`);
+        return;
+      }
+      startTransition(() => {
+        loadData();
+      });
+    } catch (err) {
+      setRowError(err instanceof Error ? err.message : "Action failed");
+    } finally {
+      setRowBusy((prev) => ({ ...prev, [gen.id]: null }));
+    }
+  }
+
   const totalUnassigned = unassigned.reduce(
     (s, g) => s + parseFloat(g.credits || "0"),
     0,
@@ -366,9 +409,15 @@ export default function SyncPage() {
     0,
   );
 
+  const totalIrrelevant = irrelevant.reduce(
+    (s, g) => s + parseFloat(g.credits || "0"),
+    0,
+  );
+
   const uPag = paginate(unassigned, unassignedPage);
   const aPag = paginate(assigned, assignedPage);
   const wPag = paginate(wasted, wastedPage);
+  const iPag = paginate(irrelevant, irrelevantPage);
 
   const clientNameMap: Record<string, string> = {};
   clients.forEach((c) => {
@@ -548,12 +597,30 @@ export default function SyncPage() {
               onClick={() => syncSelectedAccount(true)}
               disabled={syncing}
               className="text-xs text-orange-400 hover:text-orange-300 disabled:text-neutral-600 flex items-center gap-1"
-              title="Force refresh from Higgsfield (bypasses cooldown)"
+              title="Refresh new generations from Higgsfield (bypasses cooldown)"
             >
               <RefreshCw
                 className={`size-3 ${syncing ? "animate-spin" : ""}`}
               />
               Refresh
+            </button>
+            <span className="text-neutral-700 mx-1">·</span>
+            <button
+              type="button"
+              onClick={() => {
+                if (
+                  window.confirm(
+                    "Full re-sync re-walks the ENTIRE Higgsfield history for this account to rebuild credit totals. It can take a minute. Continue?",
+                  )
+                ) {
+                  syncSelectedAccount(true, true);
+                }
+              }}
+              disabled={syncing}
+              className="text-xs text-neutral-400 hover:text-neutral-200 disabled:text-neutral-600"
+              title="Re-walk all history and rebuild credit totals (slow — use once)"
+            >
+              Full re-sync
             </button>
             {cooldownLeft > 0 && !syncing && (
               <span className="text-[10px] text-neutral-600">
@@ -1005,6 +1072,98 @@ export default function SyncPage() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* IRRELEVANT — practice / past / failed work that counts nowhere */}
+      <div className="bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden opacity-90">
+        <div className="px-4 py-3 border-b border-neutral-800 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <h2 className="font-semibold text-neutral-300 text-sm flex items-center gap-2">
+              Irrelevant
+              {irrelevant.length > 0 && (
+                <Badge
+                  variant="outline"
+                  className="text-neutral-400 border-neutral-700"
+                >
+                  {irrelevant.length}
+                </Badge>
+              )}
+            </h2>
+            <span className="text-xs font-bold text-neutral-500 font-mono">
+              {totalIrrelevant.toFixed(1)} cr
+            </span>
+          </div>
+          <p className="text-xs text-neutral-600">
+            Practice / past / failed — excluded from credits &amp; reports.
+            Unmark to put back in the unassigned pool.
+          </p>
+        </div>
+        {irrelevant.length === 0 ? (
+          <div className="p-6 text-center text-neutral-600 text-sm">
+            <p>Nothing marked irrelevant.</p>
+          </div>
+        ) : (
+          <div className="flex flex-col overflow-hidden max-h-[90vh]">
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-xs">
+                <tbody className="divide-y divide-neutral-800">
+                  {iPag.slice.map((g) => {
+                    const busy = rowBusy[g.id] || null;
+                    return (
+                      <tr
+                        key={g.id}
+                        className="hover:bg-neutral-900/40 opacity-70"
+                      >
+                        <td className="px-2 py-2 w-20">
+                          <MediaPreview
+                            url={g.result_url}
+                            mediaType={g.media_type}
+                            name={g.display_name}
+                          />
+                        </td>
+                        <td className="px-2 py-2">
+                          <div className="font-medium text-neutral-400">
+                            {g.display_name}
+                          </div>
+                          {g.hf_connection_label && (
+                            <div className="text-neutral-600 text-xs mt-0.5">
+                              from {g.hf_connection_label}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-2 py-2 text-right w-20">
+                          <span className="font-bold text-neutral-500">
+                            {parseFloat(g.credits) > 0
+                              ? parseFloat(g.credits).toFixed(1)
+                              : "free"}
+                          </span>
+                        </td>
+                        <td className="px-2 py-2 w-24 text-right">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleUnmarkIrrelevant(g)}
+                            disabled={busy !== null}
+                            className="h-7 text-xs px-2 text-neutral-300 border-neutral-700 hover:bg-neutral-900"
+                            title="Put back in the unassigned pool"
+                          >
+                            {busy === "irrelevant" ? "…" : "Unmark"}
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <PaginationButtons
+              page={iPag.page}
+              totalPages={iPag.totalPages}
+              total={iPag.total}
+              onPageChange={setIrrelevantPage}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
