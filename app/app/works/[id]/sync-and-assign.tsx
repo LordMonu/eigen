@@ -108,17 +108,25 @@ export function SyncAndAssign({
   const [cooldownLeft, setCooldownLeft] = useState(0);
 
   const [destOpen, setDestOpen] = useState(false);
-  const [batchBusy, setBatchBusy] = useState<null | "actual" | "waste" | "irrelevant">(null);
+  const [batchBusy, setBatchBusy] = useState<
+    null | "actual" | "waste" | "irrelevant"
+  >(null);
   const [batchError, setBatchError] = useState<string | null>(null);
 
   // Destination selector state (Modal B)
   const [destClientId, setDestClientId] = useState<string>(clientId);
   const [destWorkId, setDestWorkId] = useState<string>(workId);
-  const [selClients, setSelClients] = useState<{ id: string; name: string }[]>([{ id: clientId, name: clientName }]);
-  const [selWorks, setSelWorks] = useState<{ id: string; title: string | null }[]>([{ id: workId, title: workTitle }]);
+  const [selClients, setSelClients] = useState<{ id: string; name: string }[]>([
+    { id: clientId, name: clientName },
+  ]);
+  const [selWorks, setSelWorks] = useState<
+    { id: string; title: string | null }[]
+  >([{ id: workId, title: workTitle }]);
   const [loadingSel, setLoadingSel] = useState(false);
 
-  const [markingIrrelevant, setMarkingIrrelevant] = useState<string | null>(null);
+  const [markingIrrelevant, setMarkingIrrelevant] = useState<string | null>(
+    null,
+  );
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
 
@@ -146,7 +154,9 @@ export function SyncAndAssign({
         q = q.eq("hf_connection_label", selectedAccount.label);
       }
       const { data } = await q;
-      const useful = (data || []).filter((g) => !g.is_waste && !g.is_irrelevant);
+      const useful = (data || []).filter(
+        (g) => !g.is_waste && !g.is_irrelevant,
+      );
       setUnassigned(useful as UnassignedGeneration[]);
       if (!silent) setLoadingUnassigned(false);
     },
@@ -171,10 +181,12 @@ export function SyncAndAssign({
       .is("deleted_at", null)
       .order("name")
       .then(({ data }) => {
-        setSelClients(data && data.length > 0 ? data : [{ id: clientId, name: clientName }]);
+        setSelClients(
+          data && data.length > 0 ? data : [{ id: clientId, name: clientName }],
+        );
         setLoadingSel(false);
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destOpen]);
 
   // Reload works when destClientId changes
@@ -190,10 +202,10 @@ export function SyncAndAssign({
         const works = data && data.length > 0 ? data : [];
         setSelWorks(works);
         setDestWorkId((prev) =>
-          works.find((w) => w.id === prev) ? prev : (works[0]?.id ?? workId)
+          works.find((w) => w.id === prev) ? prev : (works[0]?.id ?? workId),
         );
       });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destClientId, destOpen]);
 
   async function markAsIrrelevant(genId: string) {
@@ -214,7 +226,7 @@ export function SyncAndAssign({
     }
   }
 
-  async function syncAccount(force = false) {
+  async function syncAccount(force = false, full = false) {
     if (!selectedAccountId) return;
     if (!force && isCooldownActive(selectedAccountId)) return;
 
@@ -225,7 +237,7 @@ export function SyncAndAssign({
       const res = await fetch("/api/hf-sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ connectionId: selectedAccountId }),
+        body: JSON.stringify({ connectionId: selectedAccountId, full }),
       });
       if (res.status === 409) {
         setSyncError(
@@ -306,7 +318,6 @@ export function SyncAndAssign({
     setBatchError(null);
     setDestOpen(true);
   }
-
 
   async function runBatch(mode: "actual" | "waste" | "irrelevant") {
     if (selectedIds.size === 0) return;
@@ -596,6 +607,24 @@ export function SyncAndAssign({
                   <span className="text-neutral-700 mx-1">·</span>
                   <button
                     type="button"
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Full re-sync re-walks the ENTIRE Higgsfield history for this account to rebuild credit totals. It can take a minute. Continue?",
+                        )
+                      ) {
+                        syncAccount(true, true);
+                      }
+                    }}
+                    disabled={syncing}
+                    className="text-xs text-neutral-400 hover:text-neutral-200 disabled:text-neutral-600"
+                    title="Re-walk all history and rebuild credit totals (slow — use once)"
+                  >
+                    Full re-sync
+                  </button>
+                  <span className="text-neutral-700 mx-1">·</span>
+                  <button
+                    type="button"
                     onClick={toggleSelectAllVisible}
                     disabled={unassigned.length === 0}
                     className="text-xs text-lime-400 hover:underline disabled:text-neutral-600 disabled:no-underline"
@@ -819,7 +848,9 @@ export function SyncAndAssign({
                   className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-sm text-white disabled:opacity-50 focus:outline-none focus:border-neutral-500"
                 >
                   {selClients.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -830,15 +861,23 @@ export function SyncAndAssign({
                 <select
                   value={destWorkId}
                   onChange={(e) => setDestWorkId(e.target.value)}
-                  disabled={loadingSel || batchBusy !== null || isPending || selWorks.length === 0}
+                  disabled={
+                    loadingSel ||
+                    batchBusy !== null ||
+                    isPending ||
+                    selWorks.length === 0
+                  }
                   className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-sm text-white disabled:opacity-50 focus:outline-none focus:border-neutral-500"
                 >
-                  {selWorks.length === 0
-                    ? <option value="">No works for this client</option>
-                    : selWorks.map((w) => (
-                        <option key={w.id} value={w.id}>{w.title || 'Untitled'}</option>
-                      ))
-                  }
+                  {selWorks.length === 0 ? (
+                    <option value="">No works for this client</option>
+                  ) : (
+                    selWorks.map((w) => (
+                      <option key={w.id} value={w.id}>
+                        {w.title || "Untitled"}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
 
