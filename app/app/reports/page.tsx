@@ -2,9 +2,15 @@
 import { requireRole } from '@/lib/auth-helpers'
 import { createClient } from '@/lib/supabase-server'
 import { fetchAllRows } from '@/lib/fetch-all-rows'
+import {
+  buildFilterExtras,
+  fetchReportAnalytics,
+  withClientPercents,
+  type ReportGenerationRow,
+} from '@/lib/report-analytics-server'
 import Link from 'next/link'
 import { DateRangeFilter } from './date-range-filter'
-import { FilterSection, type ClientRow, type ModelRow, type VideoTypeRow, type IndustryRow, type WastageRow } from './filter-section'
+import { FilterSection } from './filter-section'
 import { ClientChart } from './client-chart'
 import { CreatorChart } from './creator-chart'
 import { ModelChart } from './model-chart'
@@ -38,44 +44,43 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   const fromDate = params.from || thirtyDaysAgo.toISOString().split('T')[0]
   const toDate = params.to || today.toISOString().split('T')[0]
 
-  const [generations, { data: clients }, { data: works }, { data: memberships }, { data: clientActivity }, { data: workActivity }] =
-    await Promise.all([
-      fetchAllRows((from, to) =>
-        supabase
-          .from('generations')
-          .select(
-            'id, display_name, result_url, media_type, credits, client_id, work_id, hf_created_at, assigned_by, is_waste, is_irrelevant, wasted_by'
-          )
-          .gte('hf_created_at', `${fromDate}T00:00:00Z`)
-          .lte('hf_created_at', `${toDate}T23:59:59Z`)
-          .order('hf_created_at', { ascending: false })
-          .range(from, to)
-      ),
-      supabase.from('clients').select('id, name, industry'),
-      supabase.from('works').select('id, title, video_type, creator_id, client_id, status, end_date, updated_at'),
-      supabase
-        .from('memberships')
-        .select('user_id, full_name, role')
-        .eq('status', 'active'),
-      supabase
-        .from('activity_log')
-        .select('id, entity_id, action, from_value, to_value, actor_name, created_at')
-        .eq('org_id', membership.org_id)
-        .eq('entity_type', 'client')
-        .gte('created_at', `${fromDate}T00:00:00Z`)
-        .lte('created_at', `${toDate}T23:59:59Z`)
-        .order('created_at', { ascending: false })
-        .limit(200),
-      supabase
-        .from('activity_log')
-        .select('id, entity_id, action, from_value, to_value, actor_name, created_at')
-        .eq('org_id', membership.org_id)
-        .eq('entity_type', 'work')
-        .gte('created_at', `${fromDate}T00:00:00Z`)
-        .lte('created_at', `${toDate}T23:59:59Z`)
-        .order('created_at', { ascending: false })
-        .limit(200),
-    ])
+  const fromIso = `${fromDate}T00:00:00Z`
+  const toIso = `${toDate}T23:59:59Z`
+
+  const [
+    analytics,
+    { data: clients },
+    { data: works },
+    { data: memberships },
+    { data: clientActivity },
+    { data: workActivity },
+  ] = await Promise.all([
+    fetchReportAnalytics(supabase, fromDate, toDate),
+    supabase.from('clients').select('id, name, industry'),
+    supabase.from('works').select('id, title, video_type, creator_id, client_id, status, end_date, updated_at'),
+    supabase
+      .from('memberships')
+      .select('user_id, full_name, role')
+      .eq('status', 'active'),
+    supabase
+      .from('activity_log')
+      .select('id, entity_id, action, from_value, to_value, actor_name, created_at')
+      .eq('org_id', membership.org_id)
+      .eq('entity_type', 'client')
+      .gte('created_at', fromIso)
+      .lte('created_at', toIso)
+      .order('created_at', { ascending: false })
+      .limit(200),
+    supabase
+      .from('activity_log')
+      .select('id, entity_id, action, from_value, to_value, actor_name, created_at')
+      .eq('org_id', membership.org_id)
+      .eq('entity_type', 'work')
+      .gte('created_at', fromIso)
+      .lte('created_at', toIso)
+      .order('created_at', { ascending: false })
+      .limit(200),
+  ])
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const clientsTyped = (clients || []) as any[]
@@ -83,319 +88,314 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   const memberMap = new Map((memberships || []).map((m) => [m.user_id, m.full_name]))
   const workMap = new Map((works || []).map((w) => [w.id, w]))
 
-  // ===== FILTER-SECTION DATA =====
-  const reworkWorkIds = new Set((works || []).filter((w) => w.status === 'rework').map((w) => w.id))
+  let totalCredits: number
+  let totalGenerations: number
+  let clientData: ReturnType<typeof withClientPercents>
+  let creatorData: Array<{ id: string; name: string; credits: number; count: number }>
+  let modelData: Array<{ name: string; credits: number; count: number }>
+  let trendData: Array<{ date: string; credits: number; count: number }>
+  let filterClientData: import('./filter-section').ClientRow[]
+  let filterModelData: import('./filter-section').ModelRow[]
+  let filterVideoTypeData: import('./filter-section').VideoTypeRow[]
+  let filterIndustryData: import('./filter-section').IndustryRow[]
+  let filterWastageData: import('./filter-section').WastageRow[]
+  let userReportData: Array<{
+    id: string
+    name: string
+    credits_assigned: number
+    wastage_count: number
+    wastage_credits: number
+    completed_on_time: number
+    deadline_missed: number
+    completed_total: number
+    active_works: number
+  }>
+  let uniqueModels: string[]
+  let periodGenerations: ReportGenerationRow[]
 
-  // — By Client —
-  const clientRowMap = new Map<string, ClientRow>()
-  clientsTyped.forEach((c) => {
-    clientRowMap.set(c.id, {
-      id: c.id,
-      name: c.name,
-      industry: (c.industry as string | null) ?? null,
-      totalWorks: (works || []).filter((w) => w.client_id === c.id).length,
-      usefulCredits: 0,
-      wastageCredits: 0,
-      reworkUsefulCredits: 0,
-      reworkWastageCredits: 0,
-      models: [],
-    })
-  })
-  const clientModelMap = new Map<string, Map<string, number>>()
-  ;(generations || []).forEach((g) => {
-    if (!g.client_id) return
-    if (g.is_irrelevant) return
-    const row = clientRowMap.get(g.client_id)
-    if (!row) return
-    const credits = parseFloat(g.credits || '0')
-    const isRework = g.work_id ? reworkWorkIds.has(g.work_id) : false
-    // Track ALL models (waste + useful) for the pie chart
-    if (!clientModelMap.has(g.client_id)) clientModelMap.set(g.client_id, new Map())
-    const mm = clientModelMap.get(g.client_id)!
-    mm.set(g.display_name, (mm.get(g.display_name) || 0) + credits)
+  if (analytics) {
+    totalCredits = analytics.totalCredits
+    totalGenerations = analytics.totalGenerations
+    clientData = withClientPercents(analytics.clientData, totalCredits)
+    creatorData = analytics.creatorData
+    modelData = analytics.modelData
+    trendData = analytics.trendData
+    filterModelData = analytics.filterModelData
+    userReportData = analytics.userReportData
+    uniqueModels = analytics.uniqueModels
+    periodGenerations = analytics.generations
 
-    if (g.is_waste) {
-      if (isRework) row.reworkWastageCredits += credits
-      else row.wastageCredits += credits
-    } else {
-      if (isRework) row.reworkUsefulCredits += credits
-      else row.usefulCredits += credits
-    }
-  })
-  clientRowMap.forEach((row, cid) => {
-    const mm = clientModelMap.get(cid)
-    if (mm) {
-      row.models = Array.from(mm.entries())
-        .map(([name, cr]) => ({ name, credits: parseFloat(cr.toFixed(2)) }))
-        .sort((a, b) => b.credits - a.credits)
-    }
-    row.usefulCredits = parseFloat(row.usefulCredits.toFixed(2))
-    row.wastageCredits = parseFloat(row.wastageCredits.toFixed(2))
-    row.reworkUsefulCredits = parseFloat(row.reworkUsefulCredits.toFixed(2))
-    row.reworkWastageCredits = parseFloat(row.reworkWastageCredits.toFixed(2))
-  })
-  const filterClientData: ClientRow[] = Array.from(clientRowMap.values())
-    .filter((r) => r.totalWorks > 0 || r.usefulCredits > 0 || r.wastageCredits > 0)
-    .sort((a, b) => (b.usefulCredits + b.wastageCredits) - (a.usefulCredits + a.wastageCredits))
-
-  // — By Model —
-  const modelRowMap = new Map<string, { usefulCredits: number; wastageCredits: number }>()
-  ;(generations || []).forEach((g) => {
-    if (g.is_irrelevant) return
-    const e = modelRowMap.get(g.display_name) || { usefulCredits: 0, wastageCredits: 0 }
-    const credits = parseFloat(g.credits || '0')
-    if (g.is_waste) e.wastageCredits += credits
-    else e.usefulCredits += credits
-    modelRowMap.set(g.display_name, e)
-  })
-  const filterModelData: ModelRow[] = Array.from(modelRowMap.entries())
-    .map(([name, d]) => ({
-      name,
-      usefulCredits: parseFloat(d.usefulCredits.toFixed(2)),
-      wastageCredits: parseFloat(d.wastageCredits.toFixed(2)),
-    }))
-    .sort((a, b) => b.usefulCredits - a.usefulCredits)
-
-  // — By Video Type —
-  const vtMap = new Map<string, { totalWorks: number; usefulCredits: number; wastageCredits: number }>()
-  ;(works || []).forEach((w) => {
-    const vt = w.video_type || 'Unspecified'
-    const e = vtMap.get(vt) || { totalWorks: 0, usefulCredits: 0, wastageCredits: 0 }
-    e.totalWorks++
-    vtMap.set(vt, e)
-  })
-  ;(generations || []).forEach((g) => {
-    if (!g.work_id) return
-    if (g.is_irrelevant) return
-    const w = workMap.get(g.work_id)
-    if (!w) return
-    const vt = w.video_type || 'Unspecified'
-    const e = vtMap.get(vt) || { totalWorks: 0, usefulCredits: 0, wastageCredits: 0 }
-    const credits = parseFloat(g.credits || '0')
-    if (g.is_waste) e.wastageCredits += credits
-    else e.usefulCredits += credits
-    vtMap.set(vt, e)
-  })
-  const filterVideoTypeData: VideoTypeRow[] = Array.from(vtMap.entries())
-    .map(([type, d]) => ({ type, ...d, usefulCredits: parseFloat(d.usefulCredits.toFixed(2)), wastageCredits: parseFloat(d.wastageCredits.toFixed(2)) }))
-    .sort((a, b) => b.usefulCredits - a.usefulCredits)
-
-  // — By Industry —
-  const clientIndustryMap = new Map(
-    clientsTyped.map((c) => [c.id as string, (c.industry as string | null) || 'Unspecified'])
-  )
-  const industryMap = new Map<string, { clients: Set<string>; totalWorks: number; usefulCredits: number; wastageCredits: number }>()
-  clientsTyped.forEach((c) => {
-    const ind = (c.industry as string | null) || 'Unspecified'
-    const e = industryMap.get(ind) || { clients: new Set(), totalWorks: 0, usefulCredits: 0, wastageCredits: 0 }
-    e.clients.add(c.id)
-    industryMap.set(ind, e)
-  })
-  ;(works || []).forEach((w) => {
-    if (!w.client_id) return
-    const ind = clientIndustryMap.get(w.client_id) || 'Unspecified'
-    const e = industryMap.get(ind) || { clients: new Set(), totalWorks: 0, usefulCredits: 0, wastageCredits: 0 }
-    e.totalWorks++
-    industryMap.set(ind, e)
-  })
-  ;(generations || []).forEach((g) => {
-    if (!g.client_id) return
-    if (g.is_irrelevant) return
-    const ind = clientIndustryMap.get(g.client_id) || 'Unspecified'
-    const e = industryMap.get(ind) || { clients: new Set(), totalWorks: 0, usefulCredits: 0, wastageCredits: 0 }
-    const credits = parseFloat(g.credits || '0')
-    if (g.is_waste) e.wastageCredits += credits
-    else e.usefulCredits += credits
-    industryMap.set(ind, e)
-  })
-  const filterIndustryData: IndustryRow[] = Array.from(industryMap.entries())
-    .map(([industry, d]) => ({
-      industry,
-      totalClients: d.clients.size,
-      totalWorks: d.totalWorks,
-      usefulCredits: parseFloat(d.usefulCredits.toFixed(2)),
-      wastageCredits: parseFloat(d.wastageCredits.toFixed(2)),
-    }))
-    .sort((a, b) => b.usefulCredits - a.usefulCredits)
-
-  // — Wastage (all works, sorted by total wastage desc) —
-  const wastageRowMap = new Map<string, WastageRow>()
-  ;(works || []).forEach((w) => {
-    wastageRowMap.set(w.id, {
-      workId: w.id,
-      workTitle: w.title,
-      clientName: clientMap.get(w.client_id) || 'Unknown',
-      status: w.status,
-      usefulCredits: 0,
-      wastageCredits: 0,
-      reworkWastageCredits: 0,
-      totalWastage: 0,
-    })
-  })
-  ;(generations || []).forEach((g) => {
-    if (!g.work_id) return
-    if (g.is_irrelevant) return
-    const row = wastageRowMap.get(g.work_id)
-    if (!row) return
-    const credits = parseFloat(g.credits || '0')
-    const isRework = reworkWorkIds.has(g.work_id)
-    if (g.is_waste) {
-      if (isRework) row.reworkWastageCredits += credits
-      else row.wastageCredits += credits
-    } else {
-      row.usefulCredits += credits
-    }
-  })
-  const filterWastageData: WastageRow[] = Array.from(wastageRowMap.values())
-    .map((r) => ({
-      ...r,
-      usefulCredits: parseFloat(r.usefulCredits.toFixed(2)),
-      wastageCredits: parseFloat(r.wastageCredits.toFixed(2)),
-      reworkWastageCredits: parseFloat(r.reworkWastageCredits.toFixed(2)),
-      totalWastage: parseFloat((r.wastageCredits + r.reworkWastageCredits).toFixed(2)),
-    }))
-    .filter((r) => r.totalWastage > 0)
-    .sort((a, b) => b.totalWastage - a.totalWastage)
-
-  // ===== AGGREGATIONS =====
-  const nonWasteGenerations = (generations || []).filter((g) => !g.is_waste && !g.is_irrelevant)
-  const totalCredits = nonWasteGenerations.reduce(
-    (s, g) => s + parseFloat(g.credits || '0'),
-    0
-  )
-  const totalGenerations = nonWasteGenerations.length
-
-  // CLIENT-WISE
-  const byClient = new Map<string, { name: string; credits: number; count: number }>()
-  nonWasteGenerations.forEach((g) => {
-    if (!g.client_id) return
-    const existing = byClient.get(g.client_id) || {
-      name: clientMap.get(g.client_id as string) || 'Unknown',
-      credits: 0,
-      count: 0,
-    }
-    existing.credits += parseFloat(g.credits || '0')
-    existing.count++
-    byClient.set(g.client_id, existing)
-  })
-  const clientData = Array.from(byClient.entries())
-    .map(([id, d]) => ({
-      id,
-      name: d.name,
-      credits: parseFloat(d.credits.toFixed(2)),
-      count: d.count,
-      percent:
-        totalCredits > 0
-          ? parseFloat(((d.credits / totalCredits) * 100).toFixed(1))
-          : 0,
-    }))
-    .sort((a, b) => b.credits - a.credits)
-
-  // CREATOR-WISE (via work join)
-  const byCreator = new Map<string, { name: string; credits: number; count: number }>()
-  nonWasteGenerations.forEach((g) => {
-    if (!g.work_id) return
-    const work = workMap.get(g.work_id)
-    if (!work) return
-    const existing = byCreator.get(work.creator_id) || {
-      name: memberMap.get(work.creator_id) || 'Unknown',
-      credits: 0,
-      count: 0,
-    }
-    existing.credits += parseFloat(g.credits || '0')
-    existing.count++
-    byCreator.set(work.creator_id, existing)
-  })
-  const creatorData = Array.from(byCreator.entries())
-    .map(([id, d]) => ({
-      id,
-      name: d.name,
-      credits: parseFloat(d.credits.toFixed(2)),
-      count: d.count,
-    }))
-    .sort((a, b) => b.credits - a.credits)
-
-  // MODEL-WISE
-  const byModel = new Map<string, { credits: number; count: number }>()
-  nonWasteGenerations.forEach((g) => {
-    const existing = byModel.get(g.display_name) || { credits: 0, count: 0 }
-    existing.credits += parseFloat(g.credits || '0')
-    existing.count++
-    byModel.set(g.display_name, existing)
-  })
-  const modelData = Array.from(byModel.entries())
-    .map(([name, d]) => ({
-      name,
-      credits: parseFloat(d.credits.toFixed(2)),
-      count: d.count,
-    }))
-    .sort((a, b) => b.credits - a.credits)
-
-  // DAILY TREND
-  const byDay = new Map<string, { credits: number; count: number }>()
-  nonWasteGenerations.forEach((g) => {
-    const day = g.hf_created_at.split('T')[0]
-    const existing = byDay.get(day) || { credits: 0, count: 0 }
-    existing.credits += parseFloat(g.credits || '0')
-    existing.count++
-    byDay.set(day, existing)
-  })
-  const trendData = Array.from(byDay.entries())
-    .map(([date, d]) => ({
-      date,
-      credits: parseFloat(d.credits.toFixed(2)),
-      count: d.count,
-    }))
-    .sort((a, b) => a.date.localeCompare(b.date))
-
-  // ===== D1: USER REPORT =====
-  const todayDate = new Date().toISOString().split('T')[0]
-  const creators = (memberships || []).filter((m) => m.role === 'creator')
-
-  const userReportData = creators.map((creator) => {
-    // Credits assigned (by this user, non-waste)
-    const assignedGens = nonWasteGenerations.filter(
-      (g) => g.assigned_by === creator.user_id
+    const extras = buildFilterExtras(
+      periodGenerations,
+      (works || []) as Array<{
+        id: string
+        video_type: string | null
+        client_id: string
+        status: string
+        title: string | null
+      }>,
+      clientsTyped.map((c) => ({
+        id: c.id as string,
+        name: c.name as string,
+        industry: (c.industry as string | null) ?? null,
+      })),
     )
-    const creditsAssigned = assignedGens.reduce(
-      (s, g) => s + parseFloat(g.credits || '0'),
-      0
+    filterVideoTypeData = extras.filterVideoTypeData
+    filterIndustryData = extras.filterIndustryData
+    filterWastageData = extras.filterWastageData
+    filterClientData = analytics.filterClientData.map((row) => ({
+      ...row,
+      models: extras.clientModels.get(row.id) || [],
+    }))
+  } else {
+    // Fallback when report_analytics RPC is not deployed yet.
+    const generations = await fetchAllRows((from, to) =>
+      supabase
+        .from('generations')
+        .select(
+          'id, display_name, result_url, media_type, credits, client_id, work_id, hf_created_at, assigned_by, is_waste, is_irrelevant, wasted_by',
+        )
+        .gte('hf_created_at', fromIso)
+        .lte('hf_created_at', toIso)
+        .order('hf_created_at', { ascending: false })
+        .range(from, to),
+    )
+    periodGenerations = (generations || []).map((g) => ({
+      id: g.id,
+      display_name: g.display_name,
+      result_url: g.result_url || '',
+      media_type: g.media_type || '',
+      credits: parseFloat(g.credits || '0'),
+      hf_created_at: g.hf_created_at,
+      client_id: g.client_id,
+      work_id: g.work_id,
+      assigned_by: g.assigned_by,
+      is_waste: !!g.is_waste,
+      is_irrelevant: !!g.is_irrelevant,
+      wasted_by: g.wasted_by,
+    }))
+
+    const nonWasteGenerations = periodGenerations.filter(
+      (g) => !g.is_waste && !g.is_irrelevant,
+    )
+    totalCredits = nonWasteGenerations.reduce((s, g) => s + g.credits, 0)
+    totalGenerations = nonWasteGenerations.length
+
+    const byClient = new Map<string, { name: string; credits: number; count: number }>()
+    nonWasteGenerations.forEach((g) => {
+      if (!g.client_id) return
+      const existing = byClient.get(g.client_id) || {
+        name: clientMap.get(g.client_id) || 'Unknown',
+        credits: 0,
+        count: 0,
+      }
+      existing.credits += g.credits
+      existing.count++
+      byClient.set(g.client_id, existing)
+    })
+    clientData = withClientPercents(
+      Array.from(byClient.entries())
+        .map(([id, d]) => ({
+          id,
+          name: d.name,
+          credits: parseFloat(d.credits.toFixed(2)),
+          count: d.count,
+        }))
+        .sort((a, b) => b.credits - a.credits),
+      totalCredits,
     )
 
-    // Wastage
-    const wasteGens = (generations || []).filter(
-      (g) => g.wasted_by === creator.user_id && g.is_waste
+    const byCreator = new Map<string, { name: string; credits: number; count: number }>()
+    nonWasteGenerations.forEach((g) => {
+      if (!g.work_id) return
+      const work = workMap.get(g.work_id)
+      if (!work) return
+      const existing = byCreator.get(work.creator_id) || {
+        name: memberMap.get(work.creator_id) || 'Unknown',
+        credits: 0,
+        count: 0,
+      }
+      existing.credits += g.credits
+      existing.count++
+      byCreator.set(work.creator_id, existing)
+    })
+    creatorData = Array.from(byCreator.entries())
+      .map(([id, d]) => ({
+        id,
+        name: d.name,
+        credits: parseFloat(d.credits.toFixed(2)),
+        count: d.count,
+      }))
+      .sort((a, b) => b.credits - a.credits)
+
+    const byModel = new Map<string, { credits: number; count: number }>()
+    nonWasteGenerations.forEach((g) => {
+      const existing = byModel.get(g.display_name) || { credits: 0, count: 0 }
+      existing.credits += g.credits
+      existing.count++
+      byModel.set(g.display_name, existing)
+    })
+    modelData = Array.from(byModel.entries())
+      .map(([name, d]) => ({
+        name,
+        credits: parseFloat(d.credits.toFixed(2)),
+        count: d.count,
+      }))
+      .sort((a, b) => b.credits - a.credits)
+
+    const byDay = new Map<string, { credits: number; count: number }>()
+    nonWasteGenerations.forEach((g) => {
+      const day = g.hf_created_at.split('T')[0]
+      const existing = byDay.get(day) || { credits: 0, count: 0 }
+      existing.credits += g.credits
+      existing.count++
+      byDay.set(day, existing)
+    })
+    trendData = Array.from(byDay.entries())
+      .map(([date, d]) => ({
+        date,
+        credits: parseFloat(d.credits.toFixed(2)),
+        count: d.count,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+
+    const extras = buildFilterExtras(
+      periodGenerations,
+      (works || []) as Array<{
+        id: string
+        video_type: string | null
+        client_id: string
+        status: string
+        title: string | null
+      }>,
+      clientsTyped.map((c) => ({
+        id: c.id as string,
+        name: c.name as string,
+        industry: (c.industry as string | null) ?? null,
+      })),
     )
-    const wastageCredits = wasteGens.reduce(
-      (s, g) => s + parseFloat(g.credits || '0'),
-      0
+    filterVideoTypeData = extras.filterVideoTypeData
+    filterIndustryData = extras.filterIndustryData
+    filterWastageData = extras.filterWastageData
+
+    const reworkWorkIds = new Set(
+      (works || []).filter((w) => w.status === 'rework').map((w) => w.id),
+    )
+    const clientRowMap = new Map<string, import('./filter-section').ClientRow>()
+    clientsTyped.forEach((c) => {
+      clientRowMap.set(c.id, {
+        id: c.id,
+        name: c.name,
+        industry: (c.industry as string | null) ?? null,
+        totalWorks: (works || []).filter((w) => w.client_id === c.id).length,
+        usefulCredits: 0,
+        wastageCredits: 0,
+        reworkUsefulCredits: 0,
+        reworkWastageCredits: 0,
+        models: extras.clientModels.get(c.id) || [],
+      })
+    })
+    periodGenerations.forEach((g) => {
+      if (!g.client_id || g.is_irrelevant) return
+      const row = clientRowMap.get(g.client_id)
+      if (!row) return
+      const isRework = g.work_id ? reworkWorkIds.has(g.work_id) : false
+      if (g.is_waste) {
+        if (isRework) row.reworkWastageCredits += g.credits
+        else row.wastageCredits += g.credits
+      } else if (isRework) {
+        row.reworkUsefulCredits += g.credits
+      } else {
+        row.usefulCredits += g.credits
+      }
+    })
+    clientRowMap.forEach((row) => {
+      row.usefulCredits = parseFloat(row.usefulCredits.toFixed(2))
+      row.wastageCredits = parseFloat(row.wastageCredits.toFixed(2))
+      row.reworkUsefulCredits = parseFloat(row.reworkUsefulCredits.toFixed(2))
+      row.reworkWastageCredits = parseFloat(row.reworkWastageCredits.toFixed(2))
+    })
+    filterClientData = Array.from(clientRowMap.values())
+      .filter((r) => r.totalWorks > 0 || r.usefulCredits > 0 || r.wastageCredits > 0)
+      .sort(
+        (a, b) =>
+          b.usefulCredits + b.wastageCredits - (a.usefulCredits + a.wastageCredits),
+      )
+
+    const modelRowMap = new Map<
+      string,
+      { usefulCredits: number; wastageCredits: number }
+    >()
+    periodGenerations.forEach((g) => {
+      if (g.is_irrelevant) return
+      const e = modelRowMap.get(g.display_name) || {
+        usefulCredits: 0,
+        wastageCredits: 0,
+      }
+      if (g.is_waste) e.wastageCredits += g.credits
+      else e.usefulCredits += g.credits
+      modelRowMap.set(g.display_name, e)
+    })
+    filterModelData = Array.from(modelRowMap.entries())
+      .map(([name, d]) => ({
+        name,
+        usefulCredits: parseFloat(d.usefulCredits.toFixed(2)),
+        wastageCredits: parseFloat(d.wastageCredits.toFixed(2)),
+      }))
+      .sort((a, b) => b.usefulCredits - a.usefulCredits)
+
+    uniqueModels = Array.from(
+      new Set(nonWasteGenerations.map((g) => g.display_name)),
     )
 
-    // Works metrics
-    const creatorWorks = (works || []).filter((w) => w.creator_id === creator.user_id)
-    const completedWorks = creatorWorks.filter((w) => w.status === 'completed')
-    const completedOnTime = completedWorks.filter((w) => {
-      if (!w.end_date || !w.updated_at) return false
-      return w.updated_at.split('T')[0] <= w.end_date
+    const todayDate = new Date().toISOString().split('T')[0]
+    const creators = (memberships || []).filter((m) => m.role === 'creator')
+    userReportData = creators.map((creator) => {
+      const assignedGens = nonWasteGenerations.filter(
+        (g) => g.assigned_by === creator.user_id,
+      )
+      const creditsAssigned = assignedGens.reduce((s, g) => s + g.credits, 0)
+      const wasteGens = periodGenerations.filter(
+        (g) => g.wasted_by === creator.user_id && g.is_waste,
+      )
+      const creatorWorks = (works || []).filter(
+        (w) => w.creator_id === creator.user_id,
+      )
+      const completedWorks = creatorWorks.filter((w) => w.status === 'completed')
+      return {
+        id: creator.user_id,
+        name: creator.full_name,
+        credits_assigned: parseFloat(creditsAssigned.toFixed(2)),
+        wastage_count: wasteGens.length,
+        wastage_credits: parseFloat(
+          wasteGens.reduce((s, g) => s + g.credits, 0).toFixed(2),
+        ),
+        completed_on_time: completedWorks.filter((w) => {
+          if (!w.end_date || !w.updated_at) return false
+          return w.updated_at.split('T')[0] <= w.end_date
+        }).length,
+        deadline_missed: creatorWorks.filter((w) => {
+          if (!w.end_date) return false
+          return w.status !== 'completed' && w.end_date < todayDate
+        }).length,
+        completed_total: completedWorks.length,
+        active_works: creatorWorks.filter((w) => w.status !== 'completed').length,
+      }
     })
-    const missedDeadline = creatorWorks.filter((w) => {
-      if (!w.end_date) return false
-      return w.status !== 'completed' && w.end_date < todayDate
-    })
-    const activeWorks = creatorWorks.filter((w) => w.status !== 'completed')
+  }
 
-    return {
-      id: creator.user_id,
-      name: creator.full_name,
-      credits_assigned: parseFloat(creditsAssigned.toFixed(2)),
-      wastage_count: wasteGens.length,
-      wastage_credits: parseFloat(wastageCredits.toFixed(2)),
-      completed_on_time: completedOnTime.length,
-      deadline_missed: missedDeadline.length,
-      completed_total: completedWorks.length,
-      active_works: activeWorks.length,
-    }
-  })
+  const filteredGenerations = periodGenerations
+    .filter((g) => !g.is_waste && !g.is_irrelevant)
+    .filter((g) => {
+      if (params.clientId && g.client_id !== params.clientId) return false
+      if (params.model && g.display_name !== params.model) return false
+      if (params.creatorId) {
+        if (!g.work_id) return false
+        const w = workMap.get(g.work_id)
+        if (!w || w.creator_id !== params.creatorId) return false
+      }
+      return true
+    })
 
   const userCsvData = userReportData.map((u) => ({
     Creator: u.name,
@@ -408,28 +408,12 @@ export default async function ReportsPage({ searchParams }: PageProps) {
     'Active Works': u.active_works,
   }))
 
-  // DRILL-DOWN (filtered by url params)
-  const filteredGenerations = nonWasteGenerations.filter((g) => {
-    if (params.clientId && g.client_id !== params.clientId) return false
-    if (params.model && g.display_name !== params.model) return false
-    if (params.creatorId) {
-      if (!g.work_id) return false
-      const w = workMap.get(g.work_id)
-      if (!w || w.creator_id !== params.creatorId) return false
-    }
-    return true
-  })
-
   const csvData = clientData.map((c) => ({
     Client: c.name,
     Credits: c.credits,
     'Percent of Total': c.percent + '%',
     Generations: c.count,
   }))
-
-  const uniqueModels = Array.from(
-    new Set(nonWasteGenerations.map((g) => g.display_name))
-  )
 
   return (
     <div className="p-6 space-y-6 text-neutral-100">
@@ -881,9 +865,9 @@ export default async function ReportsPage({ searchParams }: PageProps) {
           generations={filteredGenerations.map((g) => ({
             id: g.id,
             display_name: g.display_name,
-            result_url: g.result_url,
-            media_type: g.media_type,
-            credits: parseFloat(g.credits || '0'),
+            result_url: g.result_url || '',
+            media_type: g.media_type || '',
+            credits: g.credits,
             hf_created_at: g.hf_created_at,
             client_name: g.client_id
               ? clientMap.get(g.client_id) || 'Unknown'

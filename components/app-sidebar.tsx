@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { memo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import {
@@ -44,7 +44,7 @@ import {
 
 type Role = 'master' | 'manager' | 'creator'
 
-export function AppSidebar({
+function AppSidebarInner({
   orgName,
   role,
   fullName,
@@ -172,3 +172,5 @@ export function AppSidebar({
     </Sidebar>
   )
 }
+
+export const AppSidebar = memo(AppSidebarInner)

@@ -44,11 +44,18 @@ function MediaPreview({
   mediaType: string
   name: string
 }) {
+  if (!url) {
+    return (
+      <div className="flex h-9 w-12 items-center justify-center rounded bg-neutral-800 text-[10px] text-neutral-600">
+        —
+      </div>
+    )
+  }
   if (mediaType === 'video') {
     return (
       <video
         src={url}
-        className="w-12 h-9 rounded object-cover bg-black"
+        className="h-9 w-12 rounded bg-black object-cover"
         preload="metadata"
         muted
       />
@@ -59,7 +66,7 @@ function MediaPreview({
     <img
       src={url}
       alt={name}
-      className="w-12 h-9 rounded object-cover bg-neutral-800"
+      className="h-9 w-12 rounded bg-neutral-800 object-cover"
       loading="lazy"
     />
   )

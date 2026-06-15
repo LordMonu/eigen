@@ -19,8 +19,14 @@ import {
 } from "@/app/app/works/[id]/assign-tables";
 import {
   PaginationButtons,
-  paginate,
 } from "@/components/ui/pagination-buttons";
+import {
+  fetchSyncStats,
+  fetchSyncTabPage,
+  tabTotalPages,
+  type SyncStats,
+  type SyncTab,
+} from "@/lib/sync-generation-queries";
 import { RefreshCw } from "lucide-react";
 import {
   isCooldownActive,
@@ -81,6 +87,7 @@ export default function SyncPage() {
 
   const [clients, setClients] = useState<Client[]>([]);
   const [works, setWorks] = useState<Work[]>([]);
+  const [stats, setStats] = useState<SyncStats | null>(null);
   const [unassigned, setUnassigned] = useState<Generation[]>([]);
   const [assigned, setAssigned] = useState<Generation[]>([]);
   const [wasted, setWasted] = useState<Generation[]>([]);
@@ -171,57 +178,68 @@ export default function SyncPage() {
     }
   }, [supabase, selectedAccountId]);
 
-  const loadData = useCallback(async () => {
-    const accountLabel = selectedAccount?.label;
-
-    // PostgREST caps every SELECT at ~1000 rows per request, so walk the table
-    // in 1000-row batches via .range() until a short page signals the end.
-    // This pulls the FULL history (e.g. 13k+ generations) into the client,
-    // where paginate() then slices it into 50-per-page views.
-    async function fetchAllGenerations(): Promise<Generation[]> {
-      const BATCH = 1000;
-      const cols =
-        "id, external_id, display_name, job_set_type, result_url, media_type, prompt, credits, hf_created_at, client_id, work_id, assigned_at, assigned_by, is_waste, is_irrelevant, wasted_at, wasted_by, hf_connection_label";
-      const out: Generation[] = [];
-      for (let from = 0; ; from += BATCH) {
-        let q = supabase
-          .from("generations")
-          .select(cols)
-          .order("hf_created_at", { ascending: false })
-          .order("id", { ascending: false }) // stable tiebreak across batches
-          .range(from, from + BATCH - 1);
-        if (accountLabel) {
-          q = q.eq("hf_connection_label", accountLabel);
-        }
-        const { data, error } = await q;
-        if (error || !data || data.length === 0) break;
-        out.push(...(data as Generation[]));
-        if (data.length < BATCH) break;
+  const loadTab = useCallback(
+    async (tab: SyncTab, page: number) => {
+      const label = selectedAccount?.label ?? null;
+      const { data } = await fetchSyncTabPage<Generation>(
+        supabase,
+        tab,
+        page,
+        label,
+      );
+      switch (tab) {
+        case "unassigned":
+          setUnassigned(data);
+          break;
+        case "assigned":
+          setAssigned(data);
+          break;
+        case "wasted":
+          setWasted(data);
+          break;
+        case "irrelevant":
+          setIrrelevant(data);
+          break;
       }
-      return out;
-    }
+    },
+    [supabase, selectedAccount?.label],
+  );
 
-    const [{ data: clientData }, { data: workData }, gens] = await Promise.all([
-      supabase.from("clients").select("id, name, industry").order("name"),
-      supabase
-        .from("works")
-        .select("id, title, video_type, client_id, status")
-        .order("created_at", { ascending: false }),
-      fetchAllGenerations(),
+  const loadStats = useCallback(async () => {
+    const next = await fetchSyncStats(supabase, selectedAccount?.label ?? null);
+    if (next) setStats(next);
+  }, [supabase, selectedAccount?.label]);
+
+  const refreshData = useCallback(async () => {
+    await Promise.all([
+      loadStats(),
+      loadTab("unassigned", unassignedPage),
+      loadTab("assigned", assignedPage),
+      loadTab("wasted", wastedPage),
+      loadTab("irrelevant", irrelevantPage),
     ]);
+  }, [
+    loadStats,
+    loadTab,
+    unassignedPage,
+    assignedPage,
+    wastedPage,
+    irrelevantPage,
+  ]);
 
-    setClients(clientData || []);
-    setWorks((workData || []) as Work[]);
-    const all = gens;
-    setUnassigned(all.filter((g) => !g.client_id && !g.is_irrelevant));
-    setAssigned(all.filter((g) => g.client_id && !g.is_waste && !g.is_irrelevant));
-    setWasted(all.filter((g) => g.is_waste && !g.is_irrelevant));
-    setIrrelevant(all.filter((g) => g.is_irrelevant));
+  const loadInitialData = useCallback(async () => {
+    await Promise.all([
+      loadStats(),
+      loadTab("unassigned", 1),
+      loadTab("assigned", 1),
+      loadTab("wasted", 1),
+      loadTab("irrelevant", 1),
+    ]);
     setUnassignedPage(1);
     setAssignedPage(1);
     setWastedPage(1);
     setIrrelevantPage(1);
-  }, [supabase, selectedAccount?.label]);
+  }, [loadStats, loadTab]);
 
   useEffect(() => {
     async function init() {
@@ -232,9 +250,24 @@ export default function SyncPage() {
 
   useEffect(() => {
     if (selectedAccountId) {
-      loadData();
+      void loadInitialData();
     }
-  }, [selectedAccountId, loadData]);
+  }, [selectedAccountId, loadInitialData]);
+
+  useEffect(() => {
+    if (!selectedAccountId) return;
+    void (async () => {
+      const [{ data: clientData }, { data: workData }] = await Promise.all([
+        supabase.from("clients").select("id, name, industry").order("name"),
+        supabase
+          .from("works")
+          .select("id, title, video_type, client_id, status")
+          .order("created_at", { ascending: false }),
+      ]);
+      setClients(clientData || []);
+      setWorks((workData || []) as Work[]);
+    })();
+  }, [supabase, selectedAccountId]);
 
   async function syncSelectedAccount(force = false, full = false) {
     if (!selectedAccountId) return;
@@ -261,7 +294,7 @@ export default function SyncPage() {
       if (!res.ok) throw new Error(data.error || "Sync failed");
       markSynced(selectedAccountId);
       setSyncMessage(data.message);
-      await loadData();
+      await refreshData();
     } catch (err) {
       setSyncError(err instanceof Error ? err.message : "Sync failed");
     } finally {
@@ -272,7 +305,7 @@ export default function SyncPage() {
   async function handleSync() {
     if (!selectedAccountId) return;
     if (isCooldownActive(selectedAccountId)) {
-      await loadData();
+      await refreshData();
       return;
     }
     await syncSelectedAccount();
@@ -312,7 +345,7 @@ export default function SyncPage() {
           return;
         }
         startTransition(() => {
-          loadData();
+          void refreshData();
         });
       } catch (err) {
         setRowError(err instanceof Error ? err.message : "Action failed");
@@ -363,7 +396,7 @@ export default function SyncPage() {
       }
 
       startTransition(() => {
-        loadData();
+        void refreshData();
       });
     } catch (err) {
       setRowError(err instanceof Error ? err.message : "Action failed");
@@ -387,7 +420,7 @@ export default function SyncPage() {
         return;
       }
       startTransition(() => {
-        loadData();
+        void refreshData();
       });
     } catch (err) {
       setRowError(err instanceof Error ? err.message : "Action failed");
@@ -396,28 +429,15 @@ export default function SyncPage() {
     }
   }
 
-  const totalUnassigned = unassigned.reduce(
-    (s, g) => s + parseFloat(g.credits || "0"),
-    0,
-  );
-  const totalAssigned = assigned.reduce(
-    (s, g) => s + parseFloat(g.credits || "0"),
-    0,
-  );
-  const totalWasted = wasted.reduce(
-    (s, g) => s + parseFloat(g.credits || "0"),
-    0,
-  );
+  const totalUnassigned = stats?.unassigned_credits ?? 0;
+  const totalAssigned = stats?.assigned_credits ?? 0;
+  const totalWasted = stats?.wasted_credits ?? 0;
+  const totalIrrelevant = stats?.irrelevant_credits ?? 0;
 
-  const totalIrrelevant = irrelevant.reduce(
-    (s, g) => s + parseFloat(g.credits || "0"),
-    0,
-  );
-
-  const uPag = paginate(unassigned, unassignedPage);
-  const aPag = paginate(assigned, assignedPage);
-  const wPag = paginate(wasted, wastedPage);
-  const iPag = paginate(irrelevant, irrelevantPage);
+  const unassignedTotal = stats?.unassigned_count ?? 0;
+  const assignedTotal = stats?.assigned_count ?? 0;
+  const wastedTotal = stats?.wasted_count ?? 0;
+  const irrelevantTotal = stats?.irrelevant_count ?? 0;
 
   const clientNameMap: Record<string, string> = {};
   clients.forEach((c) => {
@@ -427,8 +447,26 @@ export default function SyncPage() {
 
   function refresh() {
     startTransition(() => {
-      loadData();
+      void refreshData();
     });
+  }
+
+  function changeTabPage(tab: SyncTab, page: number) {
+    switch (tab) {
+      case "unassigned":
+        setUnassignedPage(page);
+        break;
+      case "assigned":
+        setAssignedPage(page);
+        break;
+      case "wasted":
+        setWastedPage(page);
+        break;
+      case "irrelevant":
+        setIrrelevantPage(page);
+        break;
+    }
+    void loadTab(tab, page);
   }
 
   return (
@@ -529,7 +567,7 @@ export default function SyncPage() {
             {totalUnassigned.toFixed(1)}
           </p>
           <p className="text-neutral-500 text-xs mt-1">
-            {unassigned.length} generations
+            {unassignedTotal} generations
           </p>
         </div>
         <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-4">
@@ -538,7 +576,7 @@ export default function SyncPage() {
             {totalAssigned.toFixed(1)}
           </p>
           <p className="text-neutral-500 text-xs mt-1">
-            {assigned.length} generations
+            {assignedTotal} generations
           </p>
         </div>
         <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-4">
@@ -547,7 +585,7 @@ export default function SyncPage() {
             {totalWasted.toFixed(1)}
           </p>
           <p className="text-neutral-500 text-xs mt-1">
-            {wasted.length} generations
+            {wastedTotal} generations
           </p>
         </div>
       </div>
@@ -565,7 +603,7 @@ export default function SyncPage() {
             variant="outline"
             className="text-yellow-400 border-yellow-700"
           >
-            {unassigned.length} pending
+            {unassignedTotal} pending
           </Badge>
         </div>
 
@@ -580,6 +618,7 @@ export default function SyncPage() {
                 onClick={() => {
                   setSelectedAccountId(acc.id);
                   setUnassignedPage(1);
+                  void loadTab("unassigned", 1);
                 }}
                 className={`text-xs px-2 py-1 rounded transition-colors ${
                   selectedAccountId === acc.id
@@ -630,7 +669,7 @@ export default function SyncPage() {
           </div>
         )}
 
-        {unassigned.length === 0 ? (
+        {unassignedTotal === 0 ? (
           <div className="p-8 text-center text-neutral-500">
             <p>No unassigned generations.</p>
             <p className="text-sm mt-1">Click Sync to load your history.</p>
@@ -662,7 +701,7 @@ export default function SyncPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-800">
-                  {uPag.slice.map((gen) => {
+                  {unassigned.map((gen) => {
                     const choice = rowOf(gen.id);
                     const busy = rowBusy[gen.id] || null;
                     const visibleWorks = worksFor(choice.clientFilter);
@@ -829,10 +868,10 @@ export default function SyncPage() {
               </table>
             </div>
             <PaginationButtons
-              page={uPag.page}
-              totalPages={uPag.totalPages}
-              total={uPag.total}
-              onPageChange={setUnassignedPage}
+              page={unassignedPage}
+              totalPages={tabTotalPages(unassignedTotal)}
+              total={unassignedTotal}
+              onPageChange={(page) => changeTabPage("unassigned", page)}
             />
           </div>
         )}
@@ -852,11 +891,11 @@ export default function SyncPage() {
               </span>
             </div>
             <p className="text-xs text-neutral-500">
-              {assigned.length} generation{assigned.length === 1 ? "" : "s"}
+              {assignedTotal} generation{assignedTotal === 1 ? "" : "s"}
               {selectedAccount ? ` · ${selectedAccount.label}` : ""}
             </p>
           </div>
-          {assigned.length === 0 ? (
+          {assignedTotal === 0 ? (
             <div className="p-6 text-center text-neutral-500 text-sm">
               <p>Nothing assigned yet.</p>
             </div>
@@ -865,7 +904,7 @@ export default function SyncPage() {
               <div className="flex-1 overflow-auto">
                 <table className="w-full text-xs">
                   <tbody className="divide-y divide-neutral-800">
-                    {aPag.slice.map((g) => (
+                    {assigned.map((g) => (
                       <tr key={g.id} className="hover:bg-neutral-900/60">
                         <td className="px-2 py-2">
                           <MediaPreview
@@ -948,10 +987,10 @@ export default function SyncPage() {
                 </table>
               </div>
               <PaginationButtons
-                page={aPag.page}
-                totalPages={aPag.totalPages}
-                total={aPag.total}
-                onPageChange={setAssignedPage}
+                page={assignedPage}
+                totalPages={tabTotalPages(assignedTotal)}
+                total={assignedTotal}
+                onPageChange={(page) => changeTabPage("assigned", page)}
               />
             </div>
           )}
@@ -963,12 +1002,12 @@ export default function SyncPage() {
             <div className="flex items-center justify-between">
               <h2 className="font-semibold text-white text-sm flex items-center gap-2">
                 Wastage
-                {wasted.length > 0 && (
+                {wastedTotal > 0 && (
                   <Badge
                     variant="outline"
                     className="text-red-400 border-red-700"
                   >
-                    {wasted.length}
+                    {wastedTotal}
                   </Badge>
                 )}
               </h2>
@@ -982,7 +1021,7 @@ export default function SyncPage() {
               {selectedAccount ? ` · ${selectedAccount.label}` : ""}
             </p>
           </div>
-          {wasted.length === 0 ? (
+          {wastedTotal === 0 ? (
             <div className="p-6 text-center text-neutral-500 text-sm">
               <p>No wastage yet.</p>
             </div>
@@ -991,7 +1030,7 @@ export default function SyncPage() {
               <div className="flex-1 overflow-auto">
                 <table className="w-full text-xs">
                   <tbody className="divide-y divide-neutral-800">
-                    {wPag.slice.map((g) => (
+                    {wasted.map((g) => (
                       <tr
                         key={g.id}
                         className="bg-red-950/10 hover:bg-red-950/20"
@@ -1064,10 +1103,10 @@ export default function SyncPage() {
                 </table>
               </div>
               <PaginationButtons
-                page={wPag.page}
-                totalPages={wPag.totalPages}
-                total={wPag.total}
-                onPageChange={setWastedPage}
+                page={wastedPage}
+                totalPages={tabTotalPages(wastedTotal)}
+                total={wastedTotal}
+                onPageChange={(page) => changeTabPage("wasted", page)}
               />
             </div>
           )}
@@ -1080,12 +1119,12 @@ export default function SyncPage() {
           <div className="flex items-center gap-3">
             <h2 className="font-semibold text-neutral-300 text-sm flex items-center gap-2">
               Irrelevant
-              {irrelevant.length > 0 && (
+              {irrelevantTotal > 0 && (
                 <Badge
                   variant="outline"
                   className="text-neutral-400 border-neutral-700"
                 >
-                  {irrelevant.length}
+                  {irrelevantTotal}
                 </Badge>
               )}
             </h2>
@@ -1098,7 +1137,7 @@ export default function SyncPage() {
             Unmark to put back in the unassigned pool.
           </p>
         </div>
-        {irrelevant.length === 0 ? (
+        {irrelevantTotal === 0 ? (
           <div className="p-6 text-center text-neutral-600 text-sm">
             <p>Nothing marked irrelevant.</p>
           </div>
@@ -1107,7 +1146,7 @@ export default function SyncPage() {
             <div className="flex-1 overflow-auto">
               <table className="w-full text-xs">
                 <tbody className="divide-y divide-neutral-800">
-                  {iPag.slice.map((g) => {
+                  {irrelevant.map((g) => {
                     const busy = rowBusy[g.id] || null;
                     return (
                       <tr
@@ -1157,10 +1196,10 @@ export default function SyncPage() {
               </table>
             </div>
             <PaginationButtons
-              page={iPag.page}
-              totalPages={iPag.totalPages}
-              total={iPag.total}
-              onPageChange={setIrrelevantPage}
+              page={irrelevantPage}
+              totalPages={tabTotalPages(irrelevantTotal)}
+              total={irrelevantTotal}
+              onPageChange={(page) => changeTabPage("irrelevant", page)}
             />
           </div>
         )}

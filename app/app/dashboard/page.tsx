@@ -39,19 +39,13 @@ async function DashboardContent() {
   const isCreator = membership.role === 'creator'
 
   const [
-    generations,
+    genStatsResult,
     { data: clients },
     { data: works },
     { data: memberships },
     { data: myWorkRows },
   ] = await Promise.all([
-    fetchAllRows((from, to) =>
-      supabase
-        .from('generations')
-        .select('credits, client_id, work_id')
-        .order('id')
-        .range(from, to),
-    ),
+    supabase.rpc('dashboard_generation_stats').maybeSingle(),
     supabase.from('clients').select('id, name, status'),
     supabase
       .from('works')
@@ -67,17 +61,18 @@ async function DashboardContent() {
       .select('work_id')
       .eq('user_id', membership.user_id),
   ])
+  const genStats = genStatsResult.data as {
+    total_credits: number | string
+    unassigned_credits: number | string
+    generation_count: number | string
+  } | null
   const myWorkIdsFromJoin = new Set(
     (myWorkRows || []).map((r) => r.work_id as string),
   )
 
-  const totalCredits = (generations || []).reduce(
-    (s, g) => s + parseFloat(g.credits || '0'),
-    0
-  )
-  const unassignedCredits = (generations || [])
-    .filter((g) => !g.client_id)
-    .reduce((s, g) => s + parseFloat(g.credits || '0'), 0)
+  let totalCredits = parseFloat(String(genStats?.total_credits ?? 0))
+  let unassignedCredits = parseFloat(String(genStats?.unassigned_credits ?? 0))
+  let generationCount = Number(genStats?.generation_count ?? 0)
 
   const myWorkIds = new Set<string>([
     ...(works || [])
@@ -85,9 +80,38 @@ async function DashboardContent() {
       .map((w) => w.id),
     ...Array.from(myWorkIdsFromJoin),
   ])
-  const myCreditsUsed = (generations || [])
-    .filter((g) => g.work_id && myWorkIds.has(g.work_id))
-    .reduce((s, g) => s + parseFloat(g.credits || '0'), 0)
+  const myWorkIdList = Array.from(myWorkIds)
+  let myCreditsUsed = 0
+  if (myWorkIdList.length > 0) {
+    const { data: myCreditsUsedRaw } = await supabase.rpc('credits_for_works', {
+      p_work_ids: myWorkIdList,
+    })
+    myCreditsUsed = parseFloat(String(myCreditsUsedRaw ?? 0))
+  }
+
+  // Fallback when dashboard RPCs are not deployed yet.
+  if (!genStats) {
+    const generations = await fetchAllRows((from, to) =>
+      supabase
+        .from('generations')
+        .select('credits, client_id, work_id')
+        .order('id')
+        .range(from, to),
+    )
+    totalCredits = (generations || []).reduce(
+      (s, g) => s + parseFloat(g.credits || '0'),
+      0,
+    )
+    unassignedCredits = (generations || [])
+      .filter((g) => !g.client_id)
+      .reduce((s, g) => s + parseFloat(g.credits || '0'), 0)
+    generationCount = generations?.length || 0
+    if (myWorkIdList.length > 0) {
+      myCreditsUsed = (generations || [])
+        .filter((g) => g.work_id && myWorkIds.has(g.work_id))
+        .reduce((s, g) => s + parseFloat(g.credits || '0'), 0)
+    }
+  }
 
   const totalClients = clients?.length || 0
   const totalWorks = works?.length || 0
@@ -207,7 +231,7 @@ async function DashboardContent() {
             <KpiCard
               label="Total Credits"
               value={totalCredits.toFixed(1)}
-              subtext={`${generations?.length || 0} generations`}
+              subtext={`${generationCount} generations`}
               color="white"
             />
             <KpiCard
