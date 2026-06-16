@@ -15,7 +15,6 @@ import { ClientChart } from './client-chart'
 import { CreatorChart } from './creator-chart'
 import { ModelChart } from './model-chart'
 import { TrendsChart } from './trends-chart'
-import { GenerationsDrilldown } from './generations-drilldown'
 import { ExportButton } from './export-button'
 import { UserWastageChart } from './user-wastage-chart'
 import { UserOntimeChart } from './user-ontime-chart'
@@ -24,9 +23,6 @@ interface PageProps {
   searchParams: Promise<{
     from?: string
     to?: string
-    clientId?: string
-    model?: string
-    creatorId?: string
   }>
 }
 
@@ -110,7 +106,6 @@ export default async function ReportsPage({ searchParams }: PageProps) {
     completed_total: number
     active_works: number
   }>
-  let uniqueModels: string[]
   let periodGenerations: ReportGenerationRow[]
 
   if (analytics) {
@@ -122,7 +117,6 @@ export default async function ReportsPage({ searchParams }: PageProps) {
     trendData = analytics.trendData
     filterModelData = analytics.filterModelData
     userReportData = analytics.userReportData
-    uniqueModels = analytics.uniqueModels
     periodGenerations = analytics.generations
 
     const extras = buildFilterExtras(
@@ -344,10 +338,6 @@ export default async function ReportsPage({ searchParams }: PageProps) {
       }))
       .sort((a, b) => b.usefulCredits - a.usefulCredits)
 
-    uniqueModels = Array.from(
-      new Set(nonWasteGenerations.map((g) => g.display_name)),
-    )
-
     const todayDate = new Date().toISOString().split('T')[0]
     const creators = (memberships || []).filter((m) => m.role === 'creator')
     userReportData = creators.map((creator) => {
@@ -383,19 +373,6 @@ export default async function ReportsPage({ searchParams }: PageProps) {
       }
     })
   }
-
-  const filteredGenerations = periodGenerations
-    .filter((g) => !g.is_waste && !g.is_irrelevant)
-    .filter((g) => {
-      if (params.clientId && g.client_id !== params.clientId) return false
-      if (params.model && g.display_name !== params.model) return false
-      if (params.creatorId) {
-        if (!g.work_id) return false
-        const w = workMap.get(g.work_id)
-        if (!w || w.creator_id !== params.creatorId) return false
-      }
-      return true
-    })
 
   const userCsvData = userReportData.map((u) => ({
     Creator: u.name,
@@ -849,45 +826,6 @@ export default async function ReportsPage({ searchParams }: PageProps) {
             </table>
           </div>
         )}
-      </section>
-
-      {/* DRILL-DOWN GENERATIONS */}
-      <section className="bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-neutral-800">
-          <h2 className="font-semibold text-white">All Generations in Period</h2>
-          <p className="text-xs text-neutral-500 mt-0.5">
-            {filteredGenerations.length}{' '}
-            {filteredGenerations.length === 1 ? 'generation' : 'generations'} —
-            drill down with filters
-          </p>
-        </div>
-        <GenerationsDrilldown
-          generations={filteredGenerations.map((g) => ({
-            id: g.id,
-            display_name: g.display_name,
-            result_url: g.result_url || '',
-            media_type: g.media_type || '',
-            credits: g.credits,
-            hf_created_at: g.hf_created_at,
-            client_name: g.client_id
-              ? clientMap.get(g.client_id) || 'Unknown'
-              : 'Unassigned',
-            creator_name: g.work_id
-              ? memberMap.get(workMap.get(g.work_id)?.creator_id || '') ||
-                'Unknown'
-              : '—',
-          }))}
-          clients={clients || []}
-          memberships={memberships || []}
-          models={uniqueModels}
-          activeFilters={{
-            clientId: params.clientId,
-            model: params.model,
-            creatorId: params.creatorId,
-          }}
-          fromDate={fromDate}
-          toDate={toDate}
-        />
       </section>
     </div>
   )
