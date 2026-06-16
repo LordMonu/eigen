@@ -7,8 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Check, X, RefreshCw } from "lucide-react";
 import {
   PaginationButtons,
-  paginate,
 } from "@/components/ui/pagination-buttons";
+import {
+  fetchSyncStats,
+  fetchSyncTabPage,
+  tabTotalPages,
+} from "@/lib/sync-generation-queries";
 import {
   isCooldownActive,
   markSynced,
@@ -58,6 +62,13 @@ function MediaPreview({
   mediaType: string;
   name: string;
 }) {
+  if (!url) {
+    return (
+      <div className="flex h-10 w-14 items-center justify-center rounded bg-neutral-800 text-[10px] text-neutral-600">
+        —
+      </div>
+    );
+  }
   if (mediaType === "video") {
     return (
       <video
@@ -99,6 +110,8 @@ export function SyncAndAssign({
 
   const [pickerOpen, setPickerOpen] = useState(false);
   const [unassigned, setUnassigned] = useState<UnassignedGeneration[]>([]);
+  const [unassignedTotal, setUnassignedTotal] = useState(0);
+  const [unassignedCredits, setUnassignedCredits] = useState(0);
   const [loadingUnassigned, setLoadingUnassigned] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedAccountId, setSelectedAccountId] = useState<string>(
@@ -139,35 +152,43 @@ export function SyncAndAssign({
     return () => clearInterval(interval);
   }, [selectedAccountId]);
 
-  const loadUnassigned = useCallback(
-    async (silent = false) => {
+  const loadPickerPage = useCallback(
+    async (page: number, silent = false) => {
       if (!silent) setLoadingUnassigned(true);
-      let q = supabase
-        .from("generations")
-        .select(
-          "id, display_name, result_url, media_type, credits, hf_created_at, hf_connection_label, is_waste, is_irrelevant",
-        )
-        .is("client_id", null)
-        .order("hf_created_at", { ascending: false })
-        .limit(5000);
-      if (selectedAccount) {
-        q = q.eq("hf_connection_label", selectedAccount.label);
-      }
-      const { data } = await q;
-      const useful = (data || []).filter(
-        (g) => !g.is_waste && !g.is_irrelevant,
+      const { data } = await fetchSyncTabPage<UnassignedGeneration>(
+        supabase,
+        "unassigned",
+        page,
+        selectedAccount?.label ?? null,
       );
-      setUnassigned(useful as UnassignedGeneration[]);
+      setUnassigned(data);
       if (!silent) setLoadingUnassigned(false);
     },
-    [supabase, selectedAccount],
+    [supabase, selectedAccount?.label],
   );
+
+  const loadPickerStats = useCallback(async () => {
+    const stats = await fetchSyncStats(
+      supabase,
+      selectedAccount?.label ?? null,
+    );
+    if (stats) {
+      setUnassignedTotal(stats.unassigned_count);
+      setUnassignedCredits(stats.unassigned_credits);
+    }
+  }, [supabase, selectedAccount?.label]);
+
+  function changePickerPage(page: number) {
+    setPickerPage(page);
+    void loadPickerPage(page);
+  }
 
   useEffect(() => {
     if (pickerOpen && selectedAccountId) {
-      loadUnassigned();
+      setPickerPage(1);
+      void Promise.all([loadPickerStats(), loadPickerPage(1)]);
     }
-  }, [selectedAccountId, pickerOpen, loadUnassigned]);
+  }, [selectedAccountId, pickerOpen, loadPickerStats, loadPickerPage]);
 
   // Load all clients when Modal B opens
   useEffect(() => {
@@ -217,7 +238,10 @@ export function SyncAndAssign({
         body: JSON.stringify({ is_irrelevant: true }),
       });
       if (res.ok) {
-        loadUnassigned(true);
+        void Promise.all([
+          loadPickerStats(),
+          loadPickerPage(pickerPage, true),
+        ]);
       }
     } catch (e) {
       console.error("Mark irrelevant failed:", e);
@@ -255,7 +279,8 @@ export function SyncAndAssign({
       markSynced(selectedAccountId);
       setSyncMessage(data?.message || "Sync complete.");
       setSelectedIds(new Set());
-      await loadUnassigned(true);
+      await loadPickerStats();
+      await loadPickerPage(pickerPage, true);
       startTransition(() => {
         router.refresh();
       });
@@ -275,7 +300,7 @@ export function SyncAndAssign({
     setPickerPage(1);
     setPickerOpen(true);
 
-    await loadUnassigned();
+    await Promise.all([loadPickerStats(), loadPickerPage(1)]);
 
     if (!isCooldownActive(selectedAccountId)) {
       await syncAccount();
@@ -290,13 +315,6 @@ export function SyncAndAssign({
       return next;
     });
   }
-
-  const pPag = paginate(unassigned, pickerPage);
-
-  const totalUnassignedCredits = unassigned.reduce(
-    (s, g) => s + parseFloat(g.credits || "0"),
-    0,
-  );
 
   const allVisibleSelected =
     unassigned.length > 0 && unassigned.every((g) => selectedIds.has(g.id));
@@ -400,7 +418,7 @@ export function SyncAndAssign({
       setBatchError(
         `${failures.length} of ${ids.length} failed: ${failures.slice(0, 3).join("; ")}`,
       );
-      await loadUnassigned();
+      await Promise.all([loadPickerStats(), loadPickerPage(pickerPage, true)]);
       setSelectedIds(new Set());
       return;
     }
@@ -531,11 +549,14 @@ export function SyncAndAssign({
                       Pick generations to attribute
                     </h2>
                     <span className="text-sm font-bold text-yellow-400 font-mono">
-                      {totalUnassignedCredits.toFixed(1)} cr
+                      {unassignedCredits.toFixed(1)} cr
                     </span>
                   </div>
                   <p className="text-xs text-neutral-500 mt-0.5">
-                    {selectedIds.size} of {unassigned.length} selected
+                    {selectedIds.size} of {unassignedTotal} selected
+                    {unassignedTotal > unassigned.length
+                      ? ` · page ${pickerPage} of ${tabTotalPages(unassignedTotal)}`
+                      : ""}
                     {selectedAccount ? ` · ${selectedAccount.label}` : ""}
                   </p>
                 </div>
@@ -576,6 +597,10 @@ export function SyncAndAssign({
                         setSelectedAccountId(acc.id);
                         setPickerPage(1);
                         setSelectedIds(new Set());
+                        void Promise.all([
+                          loadPickerStats(),
+                          loadPickerPage(1),
+                        ]);
                       }}
                       className={`text-xs px-2 py-0.5 rounded transition-colors ${
                         selectedAccountId === acc.id
@@ -626,10 +651,10 @@ export function SyncAndAssign({
                   <button
                     type="button"
                     onClick={toggleSelectAllVisible}
-                    disabled={unassigned.length === 0}
+                    disabled={unassignedTotal === 0}
                     className="text-xs text-lime-400 hover:underline disabled:text-neutral-600 disabled:no-underline"
                   >
-                    {allVisibleSelected ? "Deselect all" : "Select all"}
+                    {allVisibleSelected ? "Deselect page" : "Select page"}
                   </button>
                 </div>
               )}
@@ -691,7 +716,7 @@ export function SyncAndAssign({
                       ))}
                     </ul>
                   </>
-                ) : unassigned.length === 0 ? (
+                ) : unassignedTotal === 0 ? (
                   <div className="p-8 text-center text-neutral-500 text-sm">
                     {syncing ? (
                       <div className="flex items-center justify-center gap-2">
@@ -726,7 +751,7 @@ export function SyncAndAssign({
                     )}
                     <table className="w-full text-xs">
                       <tbody className="divide-y divide-neutral-800">
-                        {pPag.slice.map((g) => {
+                        {unassigned.map((g) => {
                           const checked = selectedIds.has(g.id);
                           return (
                             <tr
@@ -792,12 +817,12 @@ export function SyncAndAssign({
                   </>
                 )}
               </div>
-              {!syncError && !loadingUnassigned && unassigned.length > 0 && (
+              {!syncError && !loadingUnassigned && unassignedTotal > 0 && (
                 <PaginationButtons
-                  page={pPag.page}
-                  totalPages={pPag.totalPages}
-                  total={pPag.total}
-                  onPageChange={setPickerPage}
+                  page={pickerPage}
+                  totalPages={tabTotalPages(unassignedTotal)}
+                  total={unassignedTotal}
+                  onPageChange={changePickerPage}
                 />
               )}
             </div>

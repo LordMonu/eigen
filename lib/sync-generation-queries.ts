@@ -27,7 +27,10 @@ function applyTabFilter<T extends { is: Function; not: Function; eq: Function }>
 ): T {
   switch (tab) {
     case 'unassigned':
-      return query.is('client_id', null).eq('is_irrelevant', false) as T
+      return query
+        .is('client_id', null)
+        .eq('is_irrelevant', false)
+        .eq('is_waste', false) as T
     case 'assigned':
       return query
         .not('client_id', 'is', null)
