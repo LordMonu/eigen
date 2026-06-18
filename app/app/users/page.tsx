@@ -72,9 +72,9 @@ export default async function UsersPage() {
   }))
 
   return (
-    <div className="p-6 space-y-8 text-neutral-100">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Users &amp; Approvals</h1>
+    <div className="min-w-0 p-4 sm:p-6 space-y-6 sm:space-y-8 text-neutral-100">
+      <div className="min-w-0">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">Users &amp; Approvals</h1>
         <p className="text-neutral-400 text-sm mt-1">
           Manage who can access {membership.org_name}.
         </p>
@@ -111,19 +111,21 @@ export default async function UsersPage() {
             {pending.map((p) => (
               <div
                 key={p.id}
-                className="px-4 py-3 flex items-center justify-between gap-4"
+                className="px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div>
+                <div className="min-w-0">
                   <div className="font-medium text-white">{p.full_name}</div>
                   <div className="text-xs text-neutral-500">
                     Requested {new Date(p.requested_at).toLocaleString()}
                   </div>
                 </div>
-                <ApprovalControls
-                  membershipId={p.id}
-                  userRole={membership.role}
-                  connections={connectionsList}
-                />
+                <div className="shrink-0 w-full sm:w-auto">
+                  <ApprovalControls
+                    membershipId={p.id}
+                    userRole={membership.role}
+                    connections={connectionsList}
+                  />
+                </div>
               </div>
             ))}
           </div>
@@ -132,9 +134,9 @@ export default async function UsersPage() {
 
       {/* ACTIVE — each row carries inline HF account access (master only).
           overflow-visible so the per-row HF-grants popover isn't clipped. */}
-      <section className="bg-neutral-950 border border-neutral-800 rounded-lg">
-        <div className="px-4 py-3 border-b border-neutral-800 flex items-center justify-between">
-          <div>
+      <section className="min-w-0 bg-neutral-950 border border-neutral-800 rounded-lg">
+        <div className="px-4 py-3 border-b border-neutral-800 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <h2 className="font-semibold text-white">Active Members</h2>
             {membership.role === 'master' && connectionsList.length > 0 && (
               <p className="text-xs text-neutral-500 mt-0.5">
@@ -143,7 +145,7 @@ export default async function UsersPage() {
               </p>
             )}
           </div>
-          <span className="text-green-400 text-sm">{active?.length || 0}</span>
+          <span className="shrink-0 text-green-400 text-sm">{active?.length || 0}</span>
         </div>
         <div className="divide-y divide-neutral-800">
           {active?.map((a) => {
@@ -153,20 +155,20 @@ export default async function UsersPage() {
             return (
               <div
                 key={a.id}
-                className="relative px-4 py-3 flex items-center justify-between gap-4"
+                className="relative px-4 py-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
               >
-                <div className="min-w-0">
-                  <div className="font-medium text-white flex items-center gap-2">
-                    {a.full_name}
-                    <span className="text-[10px] uppercase tracking-wider text-neutral-500">
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-white flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <span className="break-words">{a.full_name}</span>
+                    <span className="text-[10px] uppercase tracking-wider text-neutral-500 shrink-0">
                       {role}
                     </span>
                   </div>
-                  <div className="text-xs text-neutral-500">
+                  <div className="text-xs text-neutral-500 mt-0.5">
                     Joined {new Date(a.approved_at).toLocaleDateString('en-US')}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2 sm:justify-end shrink-0 w-full sm:w-auto">
                   {membership.role === 'master' && (
                     <MemberHfAccess
                       orgId={membership.org_id}

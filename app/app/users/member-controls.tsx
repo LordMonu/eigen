@@ -137,14 +137,14 @@ export function MemberControls({
   }
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <div className="flex items-center gap-2">
+    <div className="flex w-full flex-col items-stretch gap-1 sm:w-auto sm:items-end">
+      <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
         <Select
           value={role}
           onValueChange={(v) => changeRole(v as Role)}
           disabled={busy || isPending || !canEdit}
         >
-          <SelectTrigger className="w-28 h-8 text-xs bg-neutral-900 border-neutral-700">
+          <SelectTrigger className="h-8 w-full min-w-0 flex-1 text-xs bg-neutral-900 border-neutral-700 sm:w-28 sm:flex-none">
             <SelectValue>
               {(v) => {
                 const val = v as Role | null
@@ -167,7 +167,7 @@ export function MemberControls({
                   size="sm"
                   variant="outline"
                   disabled={busy || isPending || isLastMaster}
-                  className="h-8 text-red-400 border-red-900 hover:bg-red-950 disabled:opacity-40"
+                  className="h-8 flex-1 text-red-400 border-red-900 hover:bg-red-950 disabled:opacity-40 sm:flex-none"
                 />
               }
             >

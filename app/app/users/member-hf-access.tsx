@@ -178,7 +178,7 @@ export function MemberHfAccess({
         variant="outline"
         size="sm"
         onClick={() => setOpen(true)}
-        className="h-8 px-3 border-neutral-700 hover:border-lime-700 hover:bg-lime-950/20 text-xs gap-1.5"
+        className="h-8 w-full px-3 border-neutral-700 hover:border-lime-700 hover:bg-lime-950/20 text-xs gap-1.5 sm:w-auto"
       >
         <Settings2 className="size-3.5 text-lime-400" />
         <span className="text-neutral-300">HF access</span>
