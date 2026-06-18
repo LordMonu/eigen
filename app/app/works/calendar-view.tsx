@@ -163,15 +163,15 @@ export function CalendarView({ works, clients }: Props) {
   return (
     <div className="space-y-4">
       {/* MONTH NAV */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-center gap-2 sm:gap-3">
           <button
             onClick={prevMonth}
             className="p-1.5 rounded hover:bg-neutral-800 text-neutral-400 hover:text-white transition-colors"
           >
             <ChevronLeft className="size-5" />
           </button>
-          <h2 className="text-lg font-semibold text-white min-w-[180px] text-center">
+          <h2 className="text-base sm:text-lg font-semibold text-white min-w-[9rem] sm:min-w-[11.25rem] text-center">
             {MONTH_NAMES[month]} {year}
           </h2>
           <button
@@ -183,27 +183,29 @@ export function CalendarView({ works, clients }: Props) {
         </div>
         <button
           onClick={goToday}
-          className="text-xs text-lime-400 hover:underline"
+          className="self-center text-xs text-lime-400 hover:underline sm:self-auto"
         >
           Today
         </button>
       </div>
 
-      {/* DAY HEADERS */}
-      <div className="grid grid-cols-7 gap-px bg-neutral-800 rounded-lg overflow-hidden">
+      {/* DAY HEADERS + CELLS — scroll horizontally on narrow viewports */}
+      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
+      <div className="min-w-[36rem] grid grid-cols-7 gap-px bg-neutral-800 rounded-lg overflow-hidden">
         {DAY_NAMES.map((d) => (
           <div
             key={d}
-            className="bg-neutral-900 px-2 py-2 text-center text-xs text-neutral-500 font-medium"
+            className="bg-neutral-900 px-1 py-2 text-center text-xs text-neutral-500 font-medium sm:px-2"
           >
-            {d}
+            <span className="sm:hidden">{d.charAt(0)}</span>
+            <span className="hidden sm:inline">{d}</span>
           </div>
         ))}
 
         {/* DAY CELLS */}
         {cells.map((day, i) => {
           if (day === null) {
-            return <div key={`empty-${i}`} className="bg-neutral-950 min-h-[100px]" />
+            return <div key={`empty-${i}`} className="bg-neutral-950 min-h-[5.5rem] sm:min-h-[6.25rem]" />
           }
           const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
           const dayWorks = worksByDate.get(dateStr) || []
@@ -213,7 +215,7 @@ export function CalendarView({ works, clients }: Props) {
           return (
             <div
               key={dateStr}
-              className={`group relative bg-neutral-950 min-h-[100px] p-1.5 ${
+              className={`group relative bg-neutral-950 min-h-[5.5rem] sm:min-h-[6.25rem] p-1 sm:p-1.5 ${
                 isToday ? 'ring-1 ring-inset ring-lime-400/50' : ''
               }`}
             >
@@ -232,7 +234,7 @@ export function CalendarView({ works, clients }: Props) {
                     type="button"
                     onClick={() => handlePlusClick(dateStr)}
                     title="Create work on this day"
-                    className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-neutral-800 text-neutral-400 hover:text-lime-400"
+                    className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity p-0.5 rounded hover:bg-neutral-800 text-neutral-400 hover:text-lime-400"
                   >
                     <Plus className="size-3.5" />
                   </button>
@@ -306,6 +308,7 @@ export function CalendarView({ works, clients }: Props) {
           )
         })}
       </div>
+      </div>
 
       {/* NO DEADLINE ROW */}
       {noDeadline.length > 0 && (
@@ -339,9 +342,9 @@ export function CalendarView({ works, clients }: Props) {
 
       {/* MODAL: ALL WORKS FOR SELECTED DATE */}
       {selectedDate && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-neutral-950 border border-neutral-800 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <div className="flex items-center justify-between sticky top-0 bg-neutral-950 border-b border-neutral-800 px-4 py-3">
+        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+          <div className="bg-neutral-950 border border-neutral-800 rounded-t-lg sm:rounded-lg max-w-2xl w-full max-h-[85vh] sm:max-h-[80vh] overflow-y-auto">
+            <div className="flex items-start sm:items-center justify-between gap-3 sticky top-0 bg-neutral-950 border-b border-neutral-800 px-4 py-3">
               <div>
                 <h2 className="text-lg font-semibold text-white">
                   Works on {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {

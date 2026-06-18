@@ -11,10 +11,10 @@ interface Props {
 
 export function ViewToggle({ view, onViewChange }: Props) {
   return (
-    <div className="flex items-center gap-1 bg-neutral-900 border border-neutral-800 rounded-lg p-0.5">
+    <div className="flex w-full items-center gap-1 bg-neutral-900 border border-neutral-800 rounded-lg p-0.5 sm:w-auto">
       <button
         onClick={() => onViewChange('calendar')}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+        className={`flex flex-1 sm:flex-none items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
           view === 'calendar'
             ? 'bg-lime-400 text-black'
             : 'text-neutral-400 hover:text-white'
@@ -25,7 +25,7 @@ export function ViewToggle({ view, onViewChange }: Props) {
       </button>
       <button
         onClick={() => onViewChange('cards')}
-        className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+        className={`flex flex-1 sm:flex-none items-center justify-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors ${
           view === 'cards'
             ? 'bg-lime-400 text-black'
             : 'text-neutral-400 hover:text-white'

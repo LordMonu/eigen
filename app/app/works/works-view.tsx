@@ -111,11 +111,11 @@ export function WorksView({
   return (
     <>
       {/* TABS — client-side, instant switching */}
-      <div className="flex border-b border-neutral-800 gap-1 overflow-x-auto">
+      <div className="-mx-4 flex gap-1 overflow-x-auto border-b border-neutral-800 px-4 sm:mx-0 sm:px-0">
         <button
           type="button"
           onClick={() => handleFilterChange('all')}
-          className={`px-4 py-2 text-sm border-b-2 transition-colors whitespace-nowrap ${
+          className={`shrink-0 px-3 py-2 text-sm border-b-2 transition-colors whitespace-nowrap sm:px-4 ${
             filterStatus === 'all'
               ? 'border-lime-400 text-white'
               : 'border-transparent text-neutral-400 hover:text-white'
@@ -128,7 +128,7 @@ export function WorksView({
             key={s}
             type="button"
             onClick={() => handleFilterChange(s)}
-            className={`px-4 py-2 text-sm border-b-2 transition-colors whitespace-nowrap ${
+            className={`shrink-0 px-3 py-2 text-sm border-b-2 transition-colors whitespace-nowrap sm:px-4 ${
               filterStatus === s
                 ? 'border-lime-400 text-white'
                 : 'border-transparent text-neutral-400 hover:text-white'
@@ -140,7 +140,7 @@ export function WorksView({
       </div>
 
       {visible.length === 0 ? (
-        <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-12 text-center">
+        <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-8 sm:p-12 text-center">
           <p className="text-neutral-400">
             {allWorks.length === 0
               ? isCreator
@@ -151,7 +151,7 @@ export function WorksView({
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex justify-stretch sm:justify-end">
             <ViewToggle view={view} onViewChange={handleViewChange} />
           </div>
 
@@ -222,11 +222,11 @@ export function WorksView({
                         return `${names.slice(0, 2).join(', ')} +${names.length - 2}`
                       })()}
                     </div>
-                    <div className="flex items-end justify-between pt-3 border-t border-neutral-800">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between pt-3 border-t border-neutral-800">
                       <div className="text-xs text-neutral-500">
                         {formatDateRange(w.start_date, w.end_date) || 'No deadline'}
                       </div>
-                      <div className="text-right">
+                      <div className="flex items-end justify-between gap-3 sm:block sm:text-right">
                         <div className={`text-base font-bold ${archived ? 'text-neutral-500' : 'text-white'}`}>
                           {usedCredits.toFixed(1)}
                           {w.max_credits && (

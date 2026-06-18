@@ -19,9 +19,9 @@ export default async function WorksPage({ searchParams }: PageProps) {
   const { status: filterStatus } = await searchParams;
 
   return (
-    <div className="p-6 space-y-6 text-neutral-100">
-      <div>
-        <h1 className="text-2xl font-bold text-white">Works</h1>
+    <div className="min-w-0 p-4 sm:p-6 space-y-4 sm:space-y-6 text-neutral-100">
+      <div className="min-w-0">
+        <h1 className="text-xl sm:text-2xl font-bold text-white">Works</h1>
         <p className="text-neutral-400 text-sm mt-1">
           {membership.role === "creator"
             ? "Your assigned works."

@@ -40,7 +40,7 @@ export default function AppLayout({
 function AppShellFallback() {
   return (
     <div className="flex min-h-screen bg-black">
-      <aside className="hidden w-64 shrink-0 border-r border-neutral-800 bg-neutral-950 md:block" />
+      <aside className="hidden w-64 shrink-0 border-r border-neutral-800 bg-neutral-950 xl:block" />
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-14 shrink-0 items-center border-b border-neutral-800 px-4">
           <div className="h-4 w-32 animate-pulse rounded bg-neutral-900" />
