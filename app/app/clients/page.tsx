@@ -96,9 +96,9 @@ export default async function ClientsPage({ searchParams }: PageProps) {
     ["master", "manager"].includes(membership.role) && !rdClient;
 
   return (
-    <div className="p-6 space-y-6 text-neutral-100">
+    <div className="min-w-0 p-4 sm:p-6 space-y-4 sm:space-y-6 text-neutral-100">
       {canSetupRd && (
-        <div className="flex items-center justify-between bg-neutral-900/50 border border-neutral-800 rounded-lg px-4 py-2.5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between bg-neutral-900/50 border border-neutral-800 rounded-lg px-4 py-3 sm:py-2.5">
           <p className="text-sm text-neutral-400">
             No R&D client exists yet. Create one to track internal practice
             work.
@@ -114,7 +114,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
       />
 
       {sorted.length === 0 ? (
-        <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-12 text-center">
+        <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-8 sm:p-12 text-center">
           <p className="text-neutral-400">No clients yet.</p>
           {canCreate && (
             <p className="text-neutral-500 text-sm mt-2">

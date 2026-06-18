@@ -3,14 +3,17 @@ import { Skeleton } from '@/components/ui/skeleton'
 
 export default function ClientsLoading() {
   return (
-    <div className="p-6 space-y-6 text-neutral-100">
+    <div className="min-w-0 p-4 sm:p-6 space-y-4 sm:space-y-6 text-neutral-100">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-2">
           <Skeleton className="h-8 w-32 bg-neutral-900" />
-          <Skeleton className="h-4 w-64 bg-neutral-900" />
+          <Skeleton className="h-4 w-full max-w-sm bg-neutral-900" />
         </div>
-        <Skeleton className="h-9 w-32 bg-neutral-900 rounded-md" />
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+          <Skeleton className="h-9 w-full sm:w-52 bg-neutral-900 rounded-md" />
+          <Skeleton className="h-9 w-full sm:w-32 bg-neutral-900 rounded-md" />
+        </div>
       </div>
 
       {/* Status pipeline cards */}

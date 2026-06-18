@@ -27,7 +27,7 @@ export function SetupRdButton() {
       size="sm"
       onClick={handleSetup}
       disabled={busy || isPending}
-      className="text-neutral-400 border-neutral-700 hover:bg-neutral-900 text-xs"
+      className="w-full sm:w-auto shrink-0 text-neutral-400 border-neutral-700 hover:bg-neutral-900 text-xs"
     >
       {busy || isPending ? 'Setting up…' : '+ R&D Client'}
     </Button>

@@ -40,21 +40,21 @@ export function ClientsHeader({
 
   return (
     <>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Clients</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-white">Clients</h1>
           <p className="text-neutral-400 text-sm mt-1">
             Manage your client pipeline. Status order: ongoing → trial → in talks
             → outreach → paused → ended.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3 shrink-0">
           <Select
             value={activeFilter}
             onValueChange={(v) => handleFilterChange(v as string)}
           >
-            <SelectTrigger className="w-52 bg-neutral-900 border-neutral-700">
+            <SelectTrigger className="w-full sm:w-52 bg-neutral-900 border-neutral-700">
               <SelectValue>
                 {(v) => {
                   const val = v as string | null
@@ -76,7 +76,7 @@ export function ClientsHeader({
           {canCreate && (
             <Button
               onClick={() => setOpen(true)}
-              className="bg-lime-400 hover:bg-lime-300 text-black font-semibold"
+              className="w-full sm:w-auto bg-lime-400 hover:bg-lime-300 text-black font-semibold"
             >
               + New Client
             </Button>

@@ -55,13 +55,13 @@ export function ClientCard({ client, archived, canCreateWork }: Props) {
         )}
       </p>
 
-      <div className="flex items-center justify-between pt-3 border-t border-neutral-800">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-3 border-t border-neutral-800">
         <div className="text-xs text-neutral-500">
           {client.generationCount > 0
             ? `${client.generationCount} generation${client.generationCount > 1 ? "s" : ""}`
             : "No generations assigned"}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between gap-3 sm:justify-end">
           {canCreateWork && !archived && (
             <Button
               size="sm"
