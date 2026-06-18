@@ -34,7 +34,7 @@ export function DateRangeFilter({ fromDate, toDate }: Props) {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
       <Button
         size="sm"
         variant="outline"
@@ -68,23 +68,25 @@ export function DateRangeFilter({ fromDate, toDate }: Props) {
         1y
       </Button>
       <span className="text-neutral-500 text-xs mx-1">or</span>
-      <Input
-        type="date"
-        value={from}
-        onChange={(e) => setFrom(e.target.value)}
-        className="h-8 w-36 bg-neutral-900 border-neutral-700 text-sm"
-      />
-      <span className="text-neutral-500">→</span>
-      <Input
-        type="date"
-        value={to}
-        onChange={(e) => setTo(e.target.value)}
-        className="h-8 w-36 bg-neutral-900 border-neutral-700 text-sm"
-      />
+      <div className="flex w-full items-center gap-2 sm:w-auto">
+        <Input
+          type="date"
+          value={from}
+          onChange={(e) => setFrom(e.target.value)}
+          className="h-8 min-w-0 flex-1 bg-neutral-900 border-neutral-700 text-sm sm:w-36 sm:flex-none"
+        />
+        <span className="text-neutral-500 shrink-0">→</span>
+        <Input
+          type="date"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          className="h-8 min-w-0 flex-1 bg-neutral-900 border-neutral-700 text-sm sm:w-36 sm:flex-none"
+        />
+      </div>
       <Button
         size="sm"
         onClick={applyCustom}
-        className="bg-lime-400 hover:bg-lime-300 text-black font-semibold"
+        className="w-full sm:w-auto bg-lime-400 hover:bg-lime-300 text-black font-semibold"
       >
         Apply
       </Button>

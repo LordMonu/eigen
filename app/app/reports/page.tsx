@@ -393,11 +393,11 @@ export default async function ReportsPage({ searchParams }: PageProps) {
   }))
 
   return (
-    <div className="p-6 space-y-6 text-neutral-100">
+    <div className="min-w-0 p-4 sm:p-6 space-y-4 sm:space-y-6 text-neutral-100">
       {/* HEADER + DATE FILTER */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Reports</h1>
+      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-xl sm:text-2xl font-bold text-white">Reports</h1>
           <p className="text-neutral-400 text-sm mt-1">
             Credit usage from <span className="text-white">{fromDate}</span> to{' '}
             <span className="text-white">{toDate}</span>
@@ -439,7 +439,7 @@ export default async function ReportsPage({ searchParams }: PageProps) {
       </div>
 
       {/* FILTER TABLES */}
-      <section className="bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden">
+      <section className="min-w-0 bg-neutral-950 border border-neutral-800 rounded-lg">
         <div className="px-4 py-3 border-b border-neutral-800">
           <h2 className="font-semibold text-white">Drill-Down Analysis</h2>
           <p className="text-xs text-neutral-500 mt-0.5">
@@ -459,9 +459,9 @@ export default async function ReportsPage({ searchParams }: PageProps) {
 
       {/* ★ CLIENT-WISE — THE NORTH STAR ★ */}
       <section className="bg-neutral-950 border border-lime-900/50 rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-neutral-800 flex items-center justify-between gap-4">
-          <div>
-            <h2 className="font-semibold text-white text-lg">
+        <div className="px-4 py-3 border-b border-neutral-800 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="font-semibold text-white text-base sm:text-lg">
               ★ Client-Wise Credit Usage
             </h2>
             <p className="text-xs text-neutral-500 mt-0.5">
@@ -483,20 +483,20 @@ export default async function ReportsPage({ searchParams }: PageProps) {
         ) : (
           <div className="grid md:grid-cols-2 gap-4 p-4">
             <ClientChart data={clientData.slice(0, 10)} />
-            <div className="overflow-auto max-h-80">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 max-h-80">
+              <table className="w-full min-w-[20rem] text-sm">
                 <thead className="sticky top-0 bg-neutral-950">
                   <tr className="text-xs text-neutral-500 border-b border-neutral-800">
-                    <th className="text-left py-2 pl-2">Client</th>
-                    <th className="text-right py-2">Credits</th>
-                    <th className="text-right py-2">%</th>
-                    <th className="text-right py-2 pr-2">Gens</th>
+                    <th className="text-left py-2 pl-2 whitespace-nowrap">Client</th>
+                    <th className="text-right py-2 whitespace-nowrap">Credits</th>
+                    <th className="text-right py-2 whitespace-nowrap">%</th>
+                    <th className="text-right py-2 pr-2 whitespace-nowrap">Gens</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-800">
                   {clientData.map((row) => (
                     <tr key={row.id} className="hover:bg-neutral-900/40">
-                      <td className="py-2 pl-2 text-white">
+                      <td className="py-2 pl-2 text-white max-w-[10rem] sm:max-w-none truncate">
                         <Link
                           href={`/app/clients/${row.id}`}
                           className="hover:text-lime-400 hover:underline"
@@ -538,9 +538,9 @@ export default async function ReportsPage({ searchParams }: PageProps) {
 
       {/* ★ USER REPORT ★ */}
       <section className="bg-neutral-950 border border-purple-900/50 rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-neutral-800 flex items-center justify-between gap-4">
-          <div>
-            <h2 className="font-semibold text-white text-lg">
+        <div className="px-4 py-3 border-b border-neutral-800 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h2 className="font-semibold text-white text-base sm:text-lg">
               ★ User Report
             </h2>
             <p className="text-xs text-neutral-500 mt-0.5">
@@ -559,24 +559,24 @@ export default async function ReportsPage({ searchParams }: PageProps) {
         ) : (
           <>
             {/* Summary table */}
-            <div className="overflow-auto p-4">
-              <table className="w-full text-sm">
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 p-4">
+              <table className="w-full min-w-[44rem] text-sm">
                 <thead className="sticky top-0 bg-neutral-950">
                   <tr className="text-xs text-neutral-500 border-b border-neutral-800">
-                    <th className="text-left py-2 pl-2">Creator</th>
-                    <th className="text-right py-2">Credits Assigned</th>
-                    <th className="text-right py-2">Wastage</th>
-                    <th className="text-right py-2">Waste Cr.</th>
-                    <th className="text-right py-2">On Time</th>
-                    <th className="text-right py-2">Missed</th>
-                    <th className="text-right py-2">Completed</th>
-                    <th className="text-right py-2 pr-2">Active</th>
+                    <th className="text-left py-2 pl-2 whitespace-nowrap">Creator</th>
+                    <th className="text-right py-2 whitespace-nowrap">Credits Assigned</th>
+                    <th className="text-right py-2 whitespace-nowrap">Wastage</th>
+                    <th className="text-right py-2 whitespace-nowrap">Waste Cr.</th>
+                    <th className="text-right py-2 whitespace-nowrap">On Time</th>
+                    <th className="text-right py-2 whitespace-nowrap">Missed</th>
+                    <th className="text-right py-2 whitespace-nowrap">Completed</th>
+                    <th className="text-right py-2 pr-2 whitespace-nowrap">Active</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-neutral-800">
                   {userReportData.map((row) => (
                     <tr key={row.id} className="hover:bg-neutral-900/40">
-                      <td className="py-2 pl-2 text-white font-medium">
+                      <td className="py-2 pl-2 text-white font-medium whitespace-nowrap">
                         {row.name}
                       </td>
                       <td className="py-2 text-right text-orange-400 font-bold">
@@ -671,7 +671,7 @@ export default async function ReportsPage({ searchParams }: PageProps) {
       )}
 
       {/* MODEL BREAKDOWN */}
-      <section className="bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden">
+      <section className="min-w-0 bg-neutral-950 border border-neutral-800 rounded-lg">
         <div className="px-4 py-3 border-b border-neutral-800">
           <h2 className="font-semibold text-white">Credits by Model</h2>
           <p className="text-xs text-neutral-500 mt-0.5">
@@ -683,35 +683,64 @@ export default async function ReportsPage({ searchParams }: PageProps) {
             No generations in this period.
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 gap-4 p-4">
-            <ModelChart data={modelData.filter((d) => d.credits > 0)} />
-            <div className="overflow-auto max-h-80">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-neutral-950">
-                  <tr className="text-xs text-neutral-500 border-b border-neutral-800">
-                    <th className="text-left py-2 pl-2">Model</th>
-                    <th className="text-right py-2">Credits</th>
-                    <th className="text-right py-2 pr-2">Gens</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-neutral-800">
-                  {modelData.map((row) => (
-                    <tr key={row.name}>
-                      <td className="py-2 pl-2 text-white">{row.name}</td>
-                      <td
-                        className={`py-2 text-right font-bold ${row.credits > 0 ? 'text-orange-400' : 'text-neutral-600'}`}
-                      >
-                        {row.credits > 0 ? row.credits.toFixed(1) : 'free'}
-                      </td>
-                      <td className="py-2 text-right pr-2 text-neutral-400">
-                        {row.count}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <>
+            {/* Phone / tablet: stacked cards (no cramped table or pie legend) */}
+            <div className="lg:hidden p-4 space-y-2">
+              {modelData.map((row) => (
+                <div
+                  key={row.name}
+                  className="rounded-lg border border-neutral-800 bg-neutral-900/30 p-3"
+                >
+                  <p className="font-medium text-white leading-snug mb-2">{row.name}</p>
+                  <div className="flex items-center justify-between gap-3 py-1 text-sm">
+                    <span className="text-neutral-500">Credits</span>
+                    <span
+                      className={`font-bold ${row.credits > 0 ? 'text-orange-400' : 'text-neutral-600'}`}
+                    >
+                      {row.credits > 0 ? row.credits.toFixed(1) : 'free'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 py-1 text-sm">
+                    <span className="text-neutral-500">Generations</span>
+                    <span className="font-medium text-neutral-400">{row.count}</span>
+                  </div>
+                </div>
+              ))}
             </div>
-          </div>
+
+            {/* Desktop: chart + table side by side */}
+            <div className="hidden lg:grid lg:grid-cols-2 gap-4 p-4 min-w-0">
+              <div className="min-w-0">
+                <ModelChart data={modelData.filter((d) => d.credits > 0)} />
+              </div>
+              <div className="min-w-0 overflow-x-auto max-h-80">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-neutral-950">
+                    <tr className="text-xs text-neutral-500 border-b border-neutral-800">
+                      <th className="text-left py-2 pl-2 whitespace-nowrap">Model</th>
+                      <th className="text-right py-2 whitespace-nowrap">Credits</th>
+                      <th className="text-right py-2 pr-2 whitespace-nowrap">Gens</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-800">
+                    {modelData.map((row) => (
+                      <tr key={row.name}>
+                        <td className="py-2 pl-2 text-white">{row.name}</td>
+                        <td
+                          className={`py-2 text-right font-bold whitespace-nowrap ${row.credits > 0 ? 'text-orange-400' : 'text-neutral-600'}`}
+                        >
+                          {row.credits > 0 ? row.credits.toFixed(1) : 'free'}
+                        </td>
+                        <td className="py-2 text-right pr-2 text-neutral-400 whitespace-nowrap">
+                          {row.count}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
         )}
       </section>
 
@@ -743,21 +772,21 @@ export default async function ReportsPage({ searchParams }: PageProps) {
         {!clientActivity || clientActivity.length === 0 ? (
           <div className="p-8 text-center text-neutral-500 text-sm">No client activity in this period.</div>
         ) : (
-          <div className="overflow-auto max-h-96">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 max-h-96">
+            <table className="w-full min-w-[36rem] text-sm">
               <thead className="sticky top-0 bg-neutral-950">
                 <tr className="text-xs text-neutral-500 border-b border-neutral-800">
-                  <th className="text-left py-2 pl-4">Client</th>
-                  <th className="text-left py-2">Action</th>
-                  <th className="text-left py-2">Detail</th>
-                  <th className="text-left py-2">By</th>
-                  <th className="text-right py-2 pr-4">When</th>
+                  <th className="text-left py-2 pl-4 whitespace-nowrap">Client</th>
+                  <th className="text-left py-2 whitespace-nowrap">Action</th>
+                  <th className="text-left py-2 whitespace-nowrap">Detail</th>
+                  <th className="text-left py-2 whitespace-nowrap">By</th>
+                  <th className="text-right py-2 pr-4 whitespace-nowrap">When</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800/60">
                 {clientActivity.map((e) => (
                   <tr key={e.id} className="hover:bg-neutral-900/30">
-                    <td className="py-2 pl-4 text-white font-medium">
+                    <td className="py-2 pl-4 text-white font-medium max-w-[8rem] sm:max-w-[12rem] truncate">
                       {clientMap.get(e.entity_id) || <span className="text-neutral-600 italic">deleted</span>}
                     </td>
                     <td className="py-2"><ActivityBadge action={e.action} /></td>
@@ -791,21 +820,21 @@ export default async function ReportsPage({ searchParams }: PageProps) {
         {!workActivity || workActivity.length === 0 ? (
           <div className="p-8 text-center text-neutral-500 text-sm">No work activity in this period.</div>
         ) : (
-          <div className="overflow-auto max-h-96">
-            <table className="w-full text-sm">
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 max-h-96">
+            <table className="w-full min-w-[36rem] text-sm">
               <thead className="sticky top-0 bg-neutral-950">
                 <tr className="text-xs text-neutral-500 border-b border-neutral-800">
-                  <th className="text-left py-2 pl-4">Work</th>
-                  <th className="text-left py-2">Action</th>
-                  <th className="text-left py-2">Detail</th>
-                  <th className="text-left py-2">By</th>
-                  <th className="text-right py-2 pr-4">When</th>
+                  <th className="text-left py-2 pl-4 whitespace-nowrap">Work</th>
+                  <th className="text-left py-2 whitespace-nowrap">Action</th>
+                  <th className="text-left py-2 whitespace-nowrap">Detail</th>
+                  <th className="text-left py-2 whitespace-nowrap">By</th>
+                  <th className="text-right py-2 pr-4 whitespace-nowrap">When</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-neutral-800/60">
                 {workActivity.map((e) => (
                   <tr key={e.id} className="hover:bg-neutral-900/30">
-                    <td className="py-2 pl-4 text-white font-medium">
+                    <td className="py-2 pl-4 text-white font-medium max-w-[8rem] sm:max-w-[12rem] truncate">
                       {workMap.get(e.entity_id)?.title || <span className="text-neutral-600 italic">deleted</span>}
                     </td>
                     <td className="py-2"><ActivityBadge action={e.action} /></td>

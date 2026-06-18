@@ -46,7 +46,7 @@ export function ExportButton({ filename, data }: Props) {
       size="sm"
       variant="outline"
       onClick={handleExport}
-      className="border-neutral-700"
+      className="w-full sm:w-auto border-neutral-700 shrink-0"
     >
       ⬇ Export CSV
     </Button>

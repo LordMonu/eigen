@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { Cell, Pie, PieChart } from 'recharts'
 import {
@@ -96,6 +96,65 @@ function cr(n: number) {
   return n > 0 ? n.toFixed(2) : '—'
 }
 
+function StatRow({
+  label,
+  value,
+  className = 'text-neutral-300',
+}: {
+  label: string
+  value: string | number
+  className?: string
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 py-1 text-sm">
+      <span className="text-neutral-500 shrink-0">{label}</span>
+      <span className={`font-medium text-right ${className}`}>{value}</span>
+    </div>
+  )
+}
+
+function MobileCard({
+  children,
+  onClick,
+}: {
+  children: ReactNode
+  onClick?: () => void
+}) {
+  const interactive = !!onClick
+  return (
+    <div
+      className={`rounded-lg border border-neutral-800 bg-neutral-900/30 p-3 ${interactive ? 'cursor-pointer active:bg-neutral-900/50' : ''}`}
+      onClick={onClick}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onClick?.()
+              }
+            }
+          : undefined
+      }
+      role={interactive ? 'button' : undefined}
+      tabIndex={interactive ? 0 : undefined}
+    >
+      {children}
+    </div>
+  )
+}
+
+function MobileList({ children }: { children: ReactNode }) {
+  return <div className="lg:hidden p-4 space-y-2">{children}</div>
+}
+
+function DesktopTable({ children }: { children: ReactNode }) {
+  return (
+    <div className="hidden lg:block min-w-0 overflow-x-auto max-h-[520px]">
+      {children}
+    </div>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export function FilterSection({ clients, models, videoTypes, industries, wastage, fromDate, toDate }: Props) {
@@ -103,14 +162,14 @@ export function FilterSection({ clients, models, videoTypes, industries, wastage
   const [modelsModal, setModelsModal] = useState<ClientRow | null>(null)
 
   return (
-    <section className="bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden">
+    <div className="min-w-0">
       {/* Tab bar */}
-      <div className="flex border-b border-neutral-800 overflow-x-auto">
+      <div className="flex overflow-x-auto border-b border-neutral-800 px-2 sm:px-0">
         {TABS.map((t) => (
           <button
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`px-5 py-3 text-sm font-medium whitespace-nowrap transition-colors ${
+            className={`shrink-0 px-3 py-3 text-sm font-medium whitespace-nowrap transition-colors sm:px-5 ${
               tab === t.key
                 ? 'text-white border-b-2 border-white bg-neutral-900/40'
                 : 'text-neutral-500 hover:text-neutral-300'
@@ -122,7 +181,7 @@ export function FilterSection({ clients, models, videoTypes, industries, wastage
       </div>
 
       {/* Tables — only active tab renders */}
-      <div className="overflow-auto max-h-[520px]">
+      <div className="min-w-0">
         {tab === 'client' && (
           <ClientTable rows={clients} fromDate={fromDate} toDate={toDate} onViewModels={setModelsModal} />
         )}
@@ -180,7 +239,7 @@ export function FilterSection({ clients, models, videoTypes, industries, wastage
           )}
         </DialogContent>
       </Dialog>
-    </section>
+    </div>
   )
 }
 
@@ -204,16 +263,50 @@ function ClientTable({
   }
 
   return (
-    <table className="w-full text-sm">
+    <>
+      <MobileList>
+        {rows.map((row) => (
+          <MobileCard
+            key={row.id}
+            onClick={() =>
+              router.push(`/app/reports/clients/${row.id}?from=${fromDate}&to=${toDate}`)
+            }
+          >
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <p className="font-medium text-white leading-snug">{row.name}</p>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onViewModels(row)
+                }}
+                className="shrink-0 text-[11px] px-2.5 py-1 rounded border border-neutral-700 text-neutral-400 hover:border-lime-700 hover:text-lime-400 transition-colors"
+              >
+                {row.models.length > 0
+                  ? `${row.models.length} model${row.models.length !== 1 ? 's' : ''}`
+                  : 'Models'}
+              </button>
+            </div>
+            <StatRow label="Works" value={row.totalWorks} className="text-neutral-400" />
+            <StatRow label="Useful credits" value={cr(row.usefulCredits)} className="text-lime-400" />
+            <StatRow label="Wastage credits" value={cr(row.wastageCredits)} className="text-red-400" />
+            <StatRow label="Rework useful" value={cr(row.reworkUsefulCredits)} className="text-blue-400" />
+            <StatRow label="Rework waste" value={cr(row.reworkWastageCredits)} className="text-orange-400" />
+          </MobileCard>
+        ))}
+      </MobileList>
+
+      <DesktopTable>
+    <table className="w-full min-w-[48rem] text-sm">
       <thead className="sticky top-0 bg-neutral-950 z-10">
         <tr className="text-xs text-neutral-500 border-b border-neutral-800">
-          <th className="text-left py-2 pl-4">Client</th>
-          <th className="text-right py-2">Works</th>
-          <th className="text-right py-2">Useful Cr.</th>
-          <th className="text-right py-2">Wastage Cr.</th>
-          <th className="text-right py-2">Rework Useful</th>
-          <th className="text-right py-2">Rework Waste</th>
-          <th className="text-center py-2 pr-4">Models</th>
+          <th className="text-left py-2 pl-4 whitespace-nowrap">Client</th>
+          <th className="text-right py-2 whitespace-nowrap">Works</th>
+          <th className="text-right py-2 whitespace-nowrap">Useful Cr.</th>
+          <th className="text-right py-2 whitespace-nowrap">Wastage Cr.</th>
+          <th className="text-right py-2 whitespace-nowrap">Rework Useful</th>
+          <th className="text-right py-2 whitespace-nowrap">Rework Waste</th>
+          <th className="text-center py-2 pr-4 whitespace-nowrap">Models</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-neutral-800/60">
@@ -223,7 +316,7 @@ function ClientTable({
             className="hover:bg-neutral-900/40 cursor-pointer"
             onClick={() => router.push(`/app/reports/clients/${row.id}?from=${fromDate}&to=${toDate}`)}
           >
-            <td className="py-2.5 pl-4 text-white font-medium">{row.name}</td>
+            <td className="py-2.5 pl-4 text-white font-medium max-w-[10rem] sm:max-w-none truncate">{row.name}</td>
             <td className="py-2.5 text-right text-neutral-400">{row.totalWorks}</td>
             <td className="py-2.5 text-right text-lime-400 font-medium">{cr(row.usefulCredits)}</td>
             <td className="py-2.5 text-right text-red-400">{cr(row.wastageCredits)}</td>
@@ -241,6 +334,8 @@ function ClientTable({
         ))}
       </tbody>
     </table>
+      </DesktopTable>
+    </>
   )
 }
 
@@ -253,18 +348,35 @@ function ModelTable({ rows }: { rows: ModelRow[] }) {
   const totalUseful = rows.reduce((s, r) => s + r.usefulCredits, 0)
   const totalWastage = rows.reduce((s, r) => s + r.wastageCredits, 0)
   return (
-    <table className="w-full text-sm">
+    <>
+      <MobileList>
+        {rows.map((row) => (
+          <MobileCard key={row.name}>
+            <p className="font-medium text-white leading-snug mb-2">{row.name}</p>
+            <StatRow label="Useful credits" value={cr(row.usefulCredits)} className="text-lime-400" />
+            <StatRow label="Wastage credits" value={cr(row.wastageCredits)} className="text-red-400" />
+          </MobileCard>
+        ))}
+        <MobileCard>
+          <p className="font-medium text-neutral-400 mb-2">Total</p>
+          <StatRow label="Useful credits" value={totalUseful.toFixed(2)} className="text-white" />
+          <StatRow label="Wastage credits" value={totalWastage.toFixed(2)} className="text-red-400" />
+        </MobileCard>
+      </MobileList>
+
+      <DesktopTable>
+    <table className="w-full min-w-[24rem] text-sm">
       <thead className="sticky top-0 bg-neutral-950 z-10">
         <tr className="text-xs text-neutral-500 border-b border-neutral-800">
-          <th className="text-left py-2 pl-4">Model</th>
-          <th className="text-right py-2">Useful Credits</th>
-          <th className="text-right py-2 pr-4">Total Wastage</th>
+          <th className="text-left py-2 pl-4 whitespace-nowrap">Model</th>
+          <th className="text-right py-2 whitespace-nowrap">Useful Credits</th>
+          <th className="text-right py-2 pr-4 whitespace-nowrap">Total Wastage</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-neutral-800/60">
         {rows.map((row) => (
           <tr key={row.name} className="hover:bg-neutral-900/40">
-            <td className="py-2.5 pl-4 text-white font-medium">{row.name}</td>
+            <td className="py-2.5 pl-4 text-white font-medium max-w-[12rem] sm:max-w-none truncate">{row.name}</td>
             <td className="py-2.5 text-right text-lime-400 font-bold">{cr(row.usefulCredits)}</td>
             <td className="py-2.5 text-right pr-4 text-red-400">{cr(row.wastageCredits)}</td>
           </tr>
@@ -276,6 +388,8 @@ function ModelTable({ rows }: { rows: ModelRow[] }) {
         </tr>
       </tbody>
     </table>
+      </DesktopTable>
+    </>
   )
 }
 
@@ -286,13 +400,26 @@ function VideoTypeTable({ rows }: { rows: VideoTypeRow[] }) {
     return <Empty message="No video types in this period." />
   }
   return (
-    <table className="w-full text-sm">
+    <>
+      <MobileList>
+        {rows.map((row) => (
+          <MobileCard key={row.type}>
+            <p className="font-medium text-white leading-snug mb-2">{row.type}</p>
+            <StatRow label="Works" value={row.totalWorks} className="text-neutral-400" />
+            <StatRow label="Useful credits" value={cr(row.usefulCredits)} className="text-lime-400" />
+            <StatRow label="Wastage credits" value={cr(row.wastageCredits)} className="text-red-400" />
+          </MobileCard>
+        ))}
+      </MobileList>
+
+      <DesktopTable>
+    <table className="w-full min-w-[28rem] text-sm">
       <thead className="sticky top-0 bg-neutral-950 z-10">
         <tr className="text-xs text-neutral-500 border-b border-neutral-800">
-          <th className="text-left py-2 pl-4">Video Type</th>
-          <th className="text-right py-2">Works</th>
-          <th className="text-right py-2">Useful Credits</th>
-          <th className="text-right py-2 pr-4">Wastage Credits</th>
+          <th className="text-left py-2 pl-4 whitespace-nowrap">Video Type</th>
+          <th className="text-right py-2 whitespace-nowrap">Works</th>
+          <th className="text-right py-2 whitespace-nowrap">Useful Credits</th>
+          <th className="text-right py-2 pr-4 whitespace-nowrap">Wastage Credits</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-neutral-800/60">
@@ -306,6 +433,8 @@ function VideoTypeTable({ rows }: { rows: VideoTypeRow[] }) {
         ))}
       </tbody>
     </table>
+      </DesktopTable>
+    </>
   )
 }
 
@@ -316,14 +445,28 @@ function IndustryTable({ rows }: { rows: IndustryRow[] }) {
     return <Empty message="No industry data in this period." />
   }
   return (
-    <table className="w-full text-sm">
+    <>
+      <MobileList>
+        {rows.map((row) => (
+          <MobileCard key={row.industry}>
+            <p className="font-medium text-white leading-snug mb-2">{row.industry}</p>
+            <StatRow label="Clients" value={row.totalClients} className="text-neutral-400" />
+            <StatRow label="Works" value={row.totalWorks} className="text-neutral-400" />
+            <StatRow label="Useful credits" value={cr(row.usefulCredits)} className="text-lime-400" />
+            <StatRow label="Wastage credits" value={cr(row.wastageCredits)} className="text-red-400" />
+          </MobileCard>
+        ))}
+      </MobileList>
+
+      <DesktopTable>
+    <table className="w-full min-w-[32rem] text-sm">
       <thead className="sticky top-0 bg-neutral-950 z-10">
         <tr className="text-xs text-neutral-500 border-b border-neutral-800">
-          <th className="text-left py-2 pl-4">Industry</th>
-          <th className="text-right py-2">Clients</th>
-          <th className="text-right py-2">Works</th>
-          <th className="text-right py-2">Useful Credits</th>
-          <th className="text-right py-2 pr-4">Wastage Credits</th>
+          <th className="text-left py-2 pl-4 whitespace-nowrap">Industry</th>
+          <th className="text-right py-2 whitespace-nowrap">Clients</th>
+          <th className="text-right py-2 whitespace-nowrap">Works</th>
+          <th className="text-right py-2 whitespace-nowrap">Useful Credits</th>
+          <th className="text-right py-2 pr-4 whitespace-nowrap">Wastage Credits</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-neutral-800/60">
@@ -338,6 +481,8 @@ function IndustryTable({ rows }: { rows: IndustryRow[] }) {
         ))}
       </tbody>
     </table>
+      </DesktopTable>
+    </>
   )
 }
 
@@ -355,26 +500,56 @@ function WastageTable({ rows }: { rows: WastageRow[] }) {
   if (rows.length === 0) {
     return <Empty message="No wastage recorded in this period." />
   }
+  const totalWastage = rows.reduce((s, r) => s + r.totalWastage, 0)
   return (
-    <table className="w-full text-sm">
+    <>
+      <MobileList>
+        {rows.map((row) => (
+          <MobileCard key={row.workId}>
+            <p className="font-medium text-white leading-snug">
+              {row.workTitle || <span className="text-neutral-500 italic">Untitled</span>}
+            </p>
+            <p className="text-xs text-neutral-500 mt-0.5 mb-2">{row.clientName}</p>
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <span className={`text-xs font-medium ${STATUS_COLORS[row.status] ?? 'text-neutral-400'}`}>
+                {row.status.replace(/_/g, ' ')}
+              </span>
+              <span className="text-sm font-bold text-red-400">{row.totalWastage.toFixed(2)} cr</span>
+            </div>
+            <StatRow label="Useful credits" value={cr(row.usefulCredits)} className="text-lime-400" />
+            <StatRow label="Wastage credits" value={cr(row.wastageCredits)} className="text-red-400" />
+            <StatRow label="Rework waste" value={cr(row.reworkWastageCredits)} className="text-orange-400" />
+          </MobileCard>
+        ))}
+        <MobileCard>
+          <StatRow
+            label="Total wastage"
+            value={totalWastage.toFixed(2)}
+            className="text-red-400 font-bold"
+          />
+        </MobileCard>
+      </MobileList>
+
+      <DesktopTable>
+    <table className="w-full min-w-[44rem] text-sm">
       <thead className="sticky top-0 bg-neutral-950 z-10">
         <tr className="text-xs text-neutral-500 border-b border-neutral-800">
-          <th className="text-left py-2 pl-4">Work</th>
-          <th className="text-left py-2">Client</th>
-          <th className="text-left py-2">Status</th>
-          <th className="text-right py-2">Useful Cr.</th>
-          <th className="text-right py-2">Wastage Cr.</th>
-          <th className="text-right py-2">Rework Waste</th>
-          <th className="text-right py-2 pr-4">Total Wastage</th>
+          <th className="text-left py-2 pl-4 whitespace-nowrap">Work</th>
+          <th className="text-left py-2 whitespace-nowrap">Client</th>
+          <th className="text-left py-2 whitespace-nowrap">Status</th>
+          <th className="text-right py-2 whitespace-nowrap">Useful Cr.</th>
+          <th className="text-right py-2 whitespace-nowrap">Wastage Cr.</th>
+          <th className="text-right py-2 whitespace-nowrap">Rework Waste</th>
+          <th className="text-right py-2 pr-4 whitespace-nowrap">Total Wastage</th>
         </tr>
       </thead>
       <tbody className="divide-y divide-neutral-800/60">
         {rows.map((row) => (
           <tr key={row.workId} className="hover:bg-neutral-900/40">
-            <td className="py-2.5 pl-4 text-white font-medium">
+            <td className="py-2.5 pl-4 text-white font-medium max-w-[10rem] sm:max-w-none truncate">
               {row.workTitle || <span className="text-neutral-500 italic">Untitled</span>}
             </td>
-            <td className="py-2.5 text-neutral-400 text-xs">{row.clientName}</td>
+            <td className="py-2.5 text-neutral-400 text-xs max-w-[8rem] sm:max-w-none truncate">{row.clientName}</td>
             <td className="py-2.5">
               <span className={`text-xs font-medium ${STATUS_COLORS[row.status] ?? 'text-neutral-400'}`}>
                 {row.status.replace(/_/g, ' ')}
@@ -394,6 +569,8 @@ function WastageTable({ rows }: { rows: WastageRow[] }) {
         </tr>
       </tbody>
     </table>
+      </DesktopTable>
+    </>
   )
 }
 
