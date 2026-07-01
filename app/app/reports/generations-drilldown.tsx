@@ -46,7 +46,7 @@ function MediaPreview({
 }) {
   if (!url) {
     return (
-      <div className="flex h-9 w-12 items-center justify-center rounded bg-neutral-800 text-[10px] text-neutral-600">
+      <div className="flex h-22 w-32 2xl:h-28 2xl:w-40 items-center justify-center rounded bg-neutral-800 text-[10px] text-neutral-600">
         —
       </div>
     )
@@ -55,7 +55,7 @@ function MediaPreview({
     return (
       <video
         src={url}
-        className="h-9 w-12 rounded bg-black object-cover"
+        className="h-22 w-32 2xl:h-28 2xl:w-40 rounded bg-black object-cover"
         preload="metadata"
         muted
       />
@@ -66,7 +66,7 @@ function MediaPreview({
     <img
       src={url}
       alt={name}
-      className="h-9 w-12 rounded bg-neutral-800 object-cover"
+      className="h-22 w-32 2xl:h-28 2xl:w-40 rounded bg-neutral-800 object-cover"
       loading="lazy"
     />
   )

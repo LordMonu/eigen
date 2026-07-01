@@ -64,7 +64,7 @@ function MediaPreview({
 }) {
   if (!url) {
     return (
-      <div className="flex h-10 w-14 items-center justify-center rounded bg-neutral-800 text-[10px] text-neutral-600">
+      <div className="flex h-22 w-32 2xl:h-28 2xl:w-40 items-center justify-center rounded bg-neutral-800 text-[10px] text-neutral-600">
         —
       </div>
     );
@@ -73,7 +73,7 @@ function MediaPreview({
     return (
       <video
         src={url}
-        className="w-14 h-10 rounded object-cover bg-black"
+        className="w-32 h-22 2xl:w-40 2xl:h-28 rounded object-cover bg-black"
         preload="metadata"
         muted
       />
@@ -84,7 +84,7 @@ function MediaPreview({
     <img
       src={url}
       alt={name}
-      className="w-14 h-10 rounded object-cover bg-neutral-800"
+      className="w-32 h-22 2xl:w-40 2xl:h-28 rounded object-cover bg-neutral-800"
       loading="lazy"
     />
   );
@@ -706,7 +706,7 @@ export function SyncAndAssign({
                           className="px-3 py-2 flex items-center gap-3 animate-pulse"
                         >
                           <div className="size-5 rounded border-2 border-neutral-700 bg-neutral-900 shrink-0" />
-                          <div className="w-14 h-10 rounded bg-neutral-800 shrink-0" />
+                          <div className="w-32 h-22 2xl:w-40 2xl:h-28 rounded bg-neutral-800 shrink-0" />
                           <div className="flex-1 min-w-0 space-y-1.5">
                             <div className="h-3 w-1/2 bg-neutral-800 rounded" />
                             <div className="h-2 w-1/3 bg-neutral-900 rounded" />

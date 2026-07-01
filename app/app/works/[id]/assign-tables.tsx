@@ -68,7 +68,7 @@ export function MediaPreview({
   if (mediaType === 'feature' || !url) {
     return (
       <div
-        className="w-14 h-10 rounded bg-neutral-800 border border-neutral-700 flex items-center justify-center text-[9px] text-neutral-500 uppercase tracking-wide"
+        className="w-32 h-22 2xl:w-40 2xl:h-28 rounded bg-neutral-800 border border-neutral-700 flex items-center justify-center text-[9px] text-neutral-500 uppercase tracking-wide"
         title={name}
       >
         feat
@@ -79,7 +79,7 @@ export function MediaPreview({
     return (
       <video
         src={url}
-        className="w-14 h-10 rounded object-cover bg-black"
+        className="w-32 h-22 2xl:w-40 2xl:h-28 rounded object-cover bg-black"
         preload="metadata"
         muted
         onMouseEnter={(e) => {
@@ -98,7 +98,7 @@ export function MediaPreview({
     <img
       src={url}
       alt={name}
-      className="w-14 h-10 rounded object-cover bg-neutral-800"
+      className="w-32 h-22 2xl:w-40 2xl:h-28 rounded object-cover bg-neutral-800"
       loading="lazy"
     />
   )
