@@ -841,7 +841,7 @@ export function SyncAndAssign({
                                   target="_blank"
                                   rel="noreferrer"
                                   title="Open in Higgsfield"
-                                  className={`group relative block aspect-square rounded-[1.75rem] xl:rounded-4xl border bg-neutral-950 transition ${
+                                  className={`group relative block aspect-square rounded-[1.75rem] xl:rounded-4xl border bg-neutral-950 transition overflow-hidden ${
                                     checked
                                       ? "border-lime-400 shadow-[0_0_0_1px_rgba(163,230,53,0.45)]"
                                       : "border-neutral-800 hover:border-neutral-600"
