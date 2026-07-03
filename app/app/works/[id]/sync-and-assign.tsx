@@ -220,7 +220,8 @@ export function SyncAndAssign({
   );
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
-  const groupedUnassigned = groupByDay(unassigned);
+  const visibleUnassigned = unassigned.filter((g) => g.media_type !== "feature");
+  const groupedUnassigned = groupByDay(visibleUnassigned);
 
   useEffect(() => {
     if (!selectedAccountId) return;

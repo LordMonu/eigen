@@ -476,10 +476,15 @@ export default function SyncPage() {
     clientNameMap[c.id] = c.name;
   });
   const workTitle = (w: Work) => w.title || w.video_type || "Untitled";
-  const groupedUnassigned = groupByDay(unassigned);
-  const groupedAssigned = groupByDay(assigned);
-  const groupedWasted = groupByDay(wasted);
-  const groupedIrrelevant = groupByDay(irrelevant);
+  const visibleUnassigned = unassigned.filter((g) => g.media_type !== "feature");
+  const visibleAssigned = assigned.filter((g) => g.media_type !== "feature");
+  const visibleWasted = wasted.filter((g) => g.media_type !== "feature");
+  const visibleIrrelevant = irrelevant.filter((g) => g.media_type !== "feature");
+
+  const groupedUnassigned = groupByDay(visibleUnassigned);
+  const groupedAssigned = groupByDay(visibleAssigned);
+  const groupedWasted = groupByDay(visibleWasted);
+  const groupedIrrelevant = groupByDay(visibleIrrelevant);
 
   function refresh() {
     startTransition(() => {

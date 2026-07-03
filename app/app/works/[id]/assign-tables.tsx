@@ -373,9 +373,15 @@ export function AssignTables({
   const [error, setError] = useState<string | null>(null)
   const [selectedAccountLabel, setSelectedAccountLabel] = useState<string>(accounts[0]?.label || '')
 
-  const allAssigned = assignedToClient.filter((g) => !g.is_waste && !g.is_irrelevant)
-  const allWasted = assignedToClient.filter((g) => g.is_waste && !g.is_irrelevant)
-  const allIrrelevant = assignedToClient.filter((g) => g.is_irrelevant)
+  const allAssigned = assignedToClient.filter(
+    (g) => !g.is_waste && !g.is_irrelevant && g.media_type !== 'feature',
+  )
+  const allWasted = assignedToClient.filter(
+    (g) => g.is_waste && !g.is_irrelevant && g.media_type !== 'feature',
+  )
+  const allIrrelevant = assignedToClient.filter(
+    (g) => g.is_irrelevant && g.media_type !== 'feature',
+  )
 
   const assignedUseful = selectedAccountLabel
     ? allAssigned.filter((g) => g.hf_connection_label === selectedAccountLabel)
