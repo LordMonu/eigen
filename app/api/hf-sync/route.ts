@@ -48,7 +48,10 @@ export async function POST(req: Request) {
     }
     const role = membership.role as 'master' | 'manager' | 'creator'
 
-    const results = await forEachAccessibleConnection<Generation[]>(
+    const results = await forEachAccessibleConnection<{
+      generations: Generation[]
+      sinceMs?: number
+    }>(
       supabase,
       membership.org_id,
       user.id,
@@ -70,13 +73,16 @@ export async function POST(req: Request) {
               new Date(latest.hf_created_at as string).getTime() - OVERLAP_MS
           }
         }
-        return fetchHFGenerations(token, sinceMs)
+        return {
+          generations: await fetchHFGenerations(token, sinceMs),
+          sinceMs,
+        }
       },
       connectionId
     )
 
     const rows = results.flatMap((r) =>
-      (r.data || []).map((g) => ({
+      (r.data?.generations || []).map((g) => ({
         org_id: membership.org_id,
         hf_connection_id: r.connectionId,
         hf_connection_label: r.label,
@@ -108,6 +114,34 @@ export async function POST(req: Request) {
               : 'Already up to date — no new generations',
         errors: accountErrors,
       })
+    }
+
+    if (full || results.some((r) => !r.error && r.data?.sinceMs != null)) {
+      // Feature rows are derived from transaction leftovers, so the "truth"
+      // inside the re-synced window can change when a better job match appears.
+      // Clear only UNASSIGNED feature rows for successful accounts in the
+      // refreshed window, then upsert the rebuilt rows below.
+      await Promise.all(
+        results
+          .filter((r) => !r.error)
+          .map((r) => {
+            let query = supabase
+              .from('generations')
+              .delete()
+              .eq('org_id', membership.org_id)
+              .eq('hf_connection_id', r.connectionId)
+              .eq('job_set_type', 'feature')
+              .is('client_id', null)
+              .eq('is_irrelevant', false)
+            if (!full && r.data?.sinceMs != null) {
+              query = query.gte(
+                'hf_created_at',
+                new Date(r.data.sinceMs).toISOString()
+              )
+            }
+            return query
+          })
+      )
     }
 
     const { error } = await supabase

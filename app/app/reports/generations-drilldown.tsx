@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   Select,
@@ -44,7 +45,26 @@ function MediaPreview({
   mediaType: string
   name: string
 }) {
+  const [failed, setFailed] = useState(false)
+  const looksAudio = /\b(text\s*to\s*speech|tts|voiceover|seed\s*audio|audio|speech|voice)\b/i.test(
+    name
+  )
+
   if (!url) {
+    return (
+      <div className="flex h-22 w-32 2xl:h-28 2xl:w-40 items-center justify-center rounded bg-neutral-800 text-[10px] text-neutral-600">
+        —
+      </div>
+    )
+  }
+  if (mediaType === 'audio' || (failed && looksAudio)) {
+    return (
+      <div className="flex h-22 w-32 2xl:h-28 2xl:w-40 items-center justify-center rounded border border-neutral-700 bg-neutral-900 text-[10px] uppercase tracking-[0.2em] text-sky-300">
+        audio
+      </div>
+    )
+  }
+  if (failed) {
     return (
       <div className="flex h-22 w-32 2xl:h-28 2xl:w-40 items-center justify-center rounded bg-neutral-800 text-[10px] text-neutral-600">
         —
@@ -58,6 +78,7 @@ function MediaPreview({
         className="h-22 w-32 2xl:h-28 2xl:w-40 rounded bg-black object-cover"
         preload="metadata"
         muted
+        onError={() => setFailed(true)}
       />
     )
   }
@@ -68,6 +89,7 @@ function MediaPreview({
       alt={name}
       className="h-22 w-32 2xl:h-28 2xl:w-40 rounded bg-neutral-800 object-cover"
       loading="lazy"
+      onError={() => setFailed(true)}
     />
   )
 }

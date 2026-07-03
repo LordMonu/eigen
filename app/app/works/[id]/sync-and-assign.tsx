@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import { Button } from "@/components/ui/button";
 import { Check, X, RefreshCw } from "lucide-react";
-import {
-  PaginationButtons,
-} from "@/components/ui/pagination-buttons";
+import { PaginationButtons } from "@/components/ui/pagination-buttons";
 import {
   fetchSyncStats,
   fetchSyncTabPage,
@@ -21,6 +19,7 @@ import {
 
 interface UnassignedGeneration {
   id: string;
+  external_id: string;
   display_name: string;
   result_url: string;
   media_type: string;
@@ -42,6 +41,41 @@ interface Account {
   label: string;
 }
 
+type DayGroup<T> = { label: string; items: T[] };
+
+function dayLabel(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  const startOfDay = (dt: Date) =>
+    new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+  const diffDays = Math.round((startOfDay(today) - startOfDay(d)) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: d.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+  });
+}
+
+function groupByDay<T extends { hf_created_at: string }>(
+  rows: T[],
+): DayGroup<T>[] {
+  const groups: DayGroup<T>[] = [];
+  for (const row of rows) {
+    const label = dayLabel(row.hf_created_at);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(row);
+    else groups.push({ label, items: [row] });
+  }
+  return groups;
+}
+
+function hfAssetUrl(externalId: string) {
+  return `https://higgsfield.ai/asset/all/${externalId}`;
+}
+
 interface Props {
   workId: string;
   workTitle: string;
@@ -57,36 +91,80 @@ function MediaPreview({
   url,
   mediaType,
   name,
+  className,
 }: {
   url: string;
   mediaType: string;
   name: string;
+  className?: string;
 }) {
+  const sizeClass = className ?? "w-32 h-22 2xl:w-40 2xl:h-28";
+  const [failed, setFailed] = useState(false);
+  const looksAudio =
+    /\b(text\s*to\s*speech|tts|voiceover|seed\s*audio|audio|speech|voice)\b/i.test(
+      name,
+    );
+
   if (!url) {
     return (
-      <div className="flex h-22 w-32 2xl:h-28 2xl:w-40 items-center justify-center rounded bg-neutral-800 text-[10px] text-neutral-600">
+      <div
+        className={`flex items-center justify-center rounded bg-neutral-800 text-[10px] text-neutral-600 ${sizeClass}`}
+      >
+        —
+      </div>
+    );
+  }
+  if (mediaType === "audio") {
+    return (
+      <div
+        className={`flex items-center justify-center rounded border border-neutral-700 bg-neutral-900 text-[10px] uppercase tracking-[0.2em] text-sky-300 ${sizeClass}`}
+      >
+        audio
+      </div>
+    );
+  }
+  if (failed && looksAudio) {
+    return (
+      <div
+        className={`flex items-center justify-center rounded border border-neutral-700 bg-neutral-900 text-[10px] uppercase tracking-[0.2em] text-sky-300 ${sizeClass}`}
+      >
+        audio
+      </div>
+    );
+  }
+  if (failed) {
+    return (
+      <div
+        className={`flex items-center justify-center rounded bg-neutral-800 text-[10px] text-neutral-600 ${sizeClass}`}
+      >
         —
       </div>
     );
   }
   if (mediaType === "video") {
     return (
-      <video
-        src={url}
-        className="w-32 h-22 2xl:w-40 2xl:h-28 rounded object-cover bg-black"
-        preload="metadata"
-        muted
-      />
+      <div className={`${sizeClass} overflow-hidden rounded bg-black`}>
+        <video
+          src={url}
+          className="h-full w-full object-cover"
+          preload="metadata"
+          muted
+          onError={() => setFailed(true)}
+        />
+      </div>
     );
   }
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={url}
-      alt={name}
-      className="w-32 h-22 2xl:w-40 2xl:h-28 rounded object-cover bg-neutral-800"
-      loading="lazy"
-    />
+    <div className={`${sizeClass} overflow-hidden rounded bg-neutral-800`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt={name}
+        className="h-full w-full object-cover"
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    </div>
   );
 }
 
@@ -142,6 +220,7 @@ export function SyncAndAssign({
   );
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
+  const groupedUnassigned = groupByDay(unassigned);
 
   useEffect(() => {
     if (!selectedAccountId) return;
@@ -238,10 +317,7 @@ export function SyncAndAssign({
         body: JSON.stringify({ is_irrelevant: true }),
       });
       if (res.ok) {
-        void Promise.all([
-          loadPickerStats(),
-          loadPickerPage(pickerPage, true),
-        ]);
+        void Promise.all([loadPickerStats(), loadPickerPage(pickerPage, true)]);
       }
     } catch (e) {
       console.error("Mark irrelevant failed:", e);
@@ -537,7 +613,7 @@ export function SyncAndAssign({
           onClick={() => !batchBusy && !isPending && setPickerOpen(false)}
         >
           <div
-            className="bg-neutral-950 border border-neutral-800 rounded-lg max-w-6xl w-full max-h-[90vh] flex flex-col"
+            className="bg-neutral-950 border border-neutral-800 rounded-lg w-[95vw] max-w-[95vw] max-h-[90vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* STICKY HEADER */}
@@ -749,71 +825,62 @@ export function SyncAndAssign({
                         </span>
                       </div>
                     )}
-                    <table className="w-full text-xs">
-                      <tbody className="divide-y divide-neutral-800">
-                        {unassigned.map((g) => {
-                          const checked = selectedIds.has(g.id);
-                          return (
-                            <tr
-                              key={g.id}
-                              onClick={() => toggleSelect(g.id)}
-                              className={`cursor-pointer transition-colors ${
-                                checked
-                                  ? "bg-lime-950/30"
-                                  : "hover:bg-neutral-900/60"
-                              }`}
-                            >
-                              <td className="px-3 py-2 w-8">
-                                <div
-                                  className={`size-5 rounded border-2 flex items-center justify-center transition-colors ${
+                    <div className="divide-y divide-neutral-800">
+                      {groupedUnassigned.map((group) => (
+                        <section key={group.label} className="px-4 py-4">
+                          <div className="mb-4 text-sm font-semibold text-white">
+                            {group.label}
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 md:grid-cols-5 xl:grid-cols-10">
+                            {group.items.map((g) => {
+                              const checked = selectedIds.has(g.id);
+                              return (
+                                <a
+                                  key={g.id}
+                                  href={hfAssetUrl(g.external_id)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title="Open in Higgsfield"
+                                  className={`group relative block aspect-square rounded-[1.75rem] xl:rounded-4xl border bg-neutral-950 transition ${
                                     checked
-                                      ? "border-lime-400 bg-lime-400"
-                                      : "border-neutral-600 bg-transparent"
+                                      ? "border-lime-400 shadow-[0_0_0_1px_rgba(163,230,53,0.45)]"
+                                      : "border-neutral-800 hover:border-neutral-600"
                                   }`}
                                 >
-                                  {checked && (
-                                    <Check className="size-3 text-black" />
-                                  )}
-                                </div>
-                              </td>
-                              <td className="px-2 py-2">
-                                <MediaPreview
-                                  url={g.result_url}
-                                  mediaType={g.media_type}
-                                  name={g.display_name}
-                                />
-                              </td>
-                              <td className="px-2 py-2">
-                                <div className="font-medium text-white">
-                                  {g.display_name}
-                                </div>
-                                {g.hf_connection_label && (
-                                  <div className="text-[10px] text-neutral-500 mt-0.5">
-                                    from{" "}
-                                    <span className="text-lime-400">
-                                      {g.hf_connection_label}
-                                    </span>
-                                  </div>
-                                )}
-                              </td>
-                              <td className="px-2 py-2 text-right">
-                                <span
-                                  className={`font-bold ${
-                                    parseFloat(g.credits) > 0
-                                      ? "text-orange-400"
-                                      : "text-neutral-500"
-                                  }`}
-                                >
-                                  {parseFloat(g.credits) > 0
-                                    ? parseFloat(g.credits).toFixed(1)
-                                    : "free"}
-                                </span>
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
+                                  <button
+                                    type="button"
+                                    aria-pressed={checked}
+                                    aria-label={
+                                      checked
+                                        ? `Deselect ${g.display_name}`
+                                        : `Select ${g.display_name}`
+                                    }
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      toggleSelect(g.id);
+                                    }}
+                                    className={`absolute left-3 top-3 z-10 flex size-8 items-center justify-center rounded-xl border-2 backdrop-blur-sm transition ${
+                                      checked
+                                        ? "border-lime-400 bg-lime-400 text-black"
+                                        : "border-white/25 bg-black/35 text-transparent hover:border-white/45"
+                                    }`}
+                                  >
+                                    <Check className="size-4" />
+                                  </button>
+                                  <MediaPreview
+                                    url={g.result_url}
+                                    mediaType={g.media_type}
+                                    name={g.display_name}
+                                    className="h-full w-full object-cover"
+                                  />
+                                </a>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      ))}
+                    </div>
                   </>
                 )}
               </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useTransition } from "react";
+import { Fragment, useState, useEffect, useCallback, useTransition } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-browser";
 import { Button } from "@/components/ui/button";
@@ -78,6 +78,38 @@ interface AccessibleAccount {
 interface RowChoice {
   clientFilter: string;
   workId: string;
+}
+
+type DayGroup<T> = { label: string; items: T[] };
+
+function dayLabel(iso: string) {
+  const d = new Date(iso);
+  const today = new Date();
+  const sod = (dt: Date) => new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
+  const diffDays = Math.round((sod(today) - sod(d)) / 86400000);
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: d.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
+  });
+}
+
+function groupByDay<T extends { hf_created_at: string }>(rows: T[]): DayGroup<T>[] {
+  const groups: DayGroup<T>[] = [];
+  for (const row of rows) {
+    const label = dayLabel(row.hf_created_at);
+    const last = groups[groups.length - 1];
+    if (last && last.label === label) last.items.push(row);
+    else groups.push({ label, items: [row] });
+  }
+  return groups;
+}
+
+function hfAssetUrl(externalId: string) {
+  return `https://higgsfield.ai/asset/all/${externalId}`;
 }
 
 export default function SyncPage() {
@@ -444,6 +476,10 @@ export default function SyncPage() {
     clientNameMap[c.id] = c.name;
   });
   const workTitle = (w: Work) => w.title || w.video_type || "Untitled";
+  const groupedUnassigned = groupByDay(unassigned);
+  const groupedAssigned = groupByDay(assigned);
+  const groupedWasted = groupByDay(wasted);
+  const groupedIrrelevant = groupByDay(irrelevant);
 
   function refresh() {
     startTransition(() => {
@@ -700,24 +736,45 @@ export default function SyncPage() {
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-neutral-800">
-                  {unassigned.map((gen) => {
-                    const choice = rowOf(gen.id);
-                    const busy = rowBusy[gen.id] || null;
-                    const visibleWorks = worksFor(choice.clientFilter);
-                    return (
-                      <tr key={gen.id} className="hover:bg-neutral-900/40">
+                      <tbody className="divide-y divide-neutral-800">
+                        {groupedUnassigned.map((group) => (
+                          <Fragment key={group.label}>
+                            <tr className="bg-neutral-950/95">
+                              <td colSpan={6} className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+                                {group.label}
+                              </td>
+                            </tr>
+                            {group.items.map((gen) => {
+                          const choice = rowOf(gen.id);
+                          const busy = rowBusy[gen.id] || null;
+                          const visibleWorks = worksFor(choice.clientFilter);
+                          return (
+                            <tr key={gen.id} className="hover:bg-neutral-900/40">
                         <td className="px-3 py-2 w-36 2xl:w-44">
-                          <MediaPreview
-                            url={gen.result_url}
-                            mediaType={gen.media_type}
-                            name={gen.display_name}
-                          />
+                          <a
+                            href={hfAssetUrl(gen.external_id)}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Open in Higgsfield"
+                            className="inline-block"
+                          >
+                            <MediaPreview
+                              url={gen.result_url}
+                              mediaType={gen.media_type}
+                              name={gen.display_name}
+                            />
+                          </a>
                         </td>
                         <td className="px-3 py-2">
-                          <div className="font-medium text-white text-xs">
+                          <a
+                            href={hfAssetUrl(gen.external_id)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-medium text-white text-xs hover:text-lime-300 hover:underline"
+                            title="Open in Higgsfield"
+                          >
                             {gen.display_name}
-                          </div>
+                          </a>
                           {gen.hf_connection_label && (
                             <div className="text-lime-400 text-xs mt-0.5 font-medium">
                               {gen.hf_connection_label}
@@ -861,10 +918,12 @@ export default function SyncPage() {
                             </Button>
                           </div>
                         </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
+                            </tr>
+                          );
+                        })}
+                          </Fragment>
+                        ))}
+                      </tbody>
               </table>
             </div>
             <PaginationButtons
@@ -904,19 +963,40 @@ export default function SyncPage() {
               <div className="flex-1 overflow-auto">
                 <table className="w-full text-xs">
                   <tbody className="divide-y divide-neutral-800">
-                    {assigned.map((g) => (
+                    {groupedAssigned.map((group) => (
+                      <Fragment key={group.label}>
+                        <tr className="bg-neutral-950/95">
+                          <td colSpan={4} className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+                            {group.label}
+                          </td>
+                        </tr>
+                        {group.items.map((g) => (
                       <tr key={g.id} className="hover:bg-neutral-900/60">
                         <td className="px-2 py-2">
-                          <MediaPreview
-                            url={g.result_url}
-                            mediaType={g.media_type}
-                            name={g.display_name}
-                          />
+                          <a
+                            href={hfAssetUrl(g.external_id)}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Open in Higgsfield"
+                            className="inline-block"
+                          >
+                            <MediaPreview
+                              url={g.result_url}
+                              mediaType={g.media_type}
+                              name={g.display_name}
+                            />
+                          </a>
                         </td>
                         <td className="px-2 py-2">
-                          <div className="font-medium text-white">
+                          <a
+                            href={hfAssetUrl(g.external_id)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-medium text-white hover:text-lime-300 hover:underline"
+                            title="Open in Higgsfield"
+                          >
                             {g.display_name}
-                          </div>
+                          </a>
                           <div className="text-neutral-500 text-xs mt-0.5 space-y-0.5">
                             {g.work_id &&
                               (() => {
@@ -983,6 +1063,8 @@ export default function SyncPage() {
                         </td>
                       </tr>
                     ))}
+                      </Fragment>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -1030,22 +1112,43 @@ export default function SyncPage() {
               <div className="flex-1 overflow-auto">
                 <table className="w-full text-xs">
                   <tbody className="divide-y divide-neutral-800">
-                    {wasted.map((g) => (
+                    {groupedWasted.map((group) => (
+                      <Fragment key={group.label}>
+                        <tr className="bg-neutral-950/95">
+                          <td colSpan={4} className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+                            {group.label}
+                          </td>
+                        </tr>
+                        {group.items.map((g) => (
                       <tr
                         key={g.id}
                         className="bg-red-950/10 hover:bg-red-950/20"
                       >
                         <td className="px-2 py-2">
-                          <MediaPreview
-                            url={g.result_url}
-                            mediaType={g.media_type}
-                            name={g.display_name}
-                          />
+                          <a
+                            href={hfAssetUrl(g.external_id)}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Open in Higgsfield"
+                            className="inline-block"
+                          >
+                            <MediaPreview
+                              url={g.result_url}
+                              mediaType={g.media_type}
+                              name={g.display_name}
+                            />
+                          </a>
                         </td>
                         <td className="px-2 py-2">
-                          <div className="font-medium text-neutral-400 line-through">
+                          <a
+                            href={hfAssetUrl(g.external_id)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-medium text-neutral-400 line-through hover:text-lime-300 hover:underline"
+                            title="Open in Higgsfield"
+                          >
                             {g.display_name}
-                          </div>
+                          </a>
                           <div className="text-xs text-neutral-600 mt-0.5 space-y-0.5">
                             <div>
                               Marked{" "}
@@ -1099,6 +1202,8 @@ export default function SyncPage() {
                         </td>
                       </tr>
                     ))}
+                      </Fragment>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -1146,7 +1251,14 @@ export default function SyncPage() {
             <div className="flex-1 overflow-auto">
               <table className="w-full text-xs">
                 <tbody className="divide-y divide-neutral-800">
-                  {irrelevant.map((g) => {
+                  {groupedIrrelevant.map((group) => (
+                    <Fragment key={group.label}>
+                      <tr className="bg-neutral-950/95">
+                        <td colSpan={4} className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+                          {group.label}
+                        </td>
+                      </tr>
+                      {group.items.map((g) => {
                     const busy = rowBusy[g.id] || null;
                     return (
                       <tr
@@ -1154,16 +1266,30 @@ export default function SyncPage() {
                         className="hover:bg-neutral-900/40 opacity-70"
                       >
                         <td className="px-2 py-2 w-36 2xl:w-44">
-                          <MediaPreview
-                            url={g.result_url}
-                            mediaType={g.media_type}
-                            name={g.display_name}
-                          />
+                          <a
+                            href={hfAssetUrl(g.external_id)}
+                            target="_blank"
+                            rel="noreferrer"
+                            title="Open in Higgsfield"
+                            className="inline-block"
+                          >
+                            <MediaPreview
+                              url={g.result_url}
+                              mediaType={g.media_type}
+                              name={g.display_name}
+                            />
+                          </a>
                         </td>
                         <td className="px-2 py-2">
-                          <div className="font-medium text-neutral-400">
+                          <a
+                            href={hfAssetUrl(g.external_id)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="font-medium text-neutral-400 hover:text-lime-300 hover:underline"
+                            title="Open in Higgsfield"
+                          >
                             {g.display_name}
-                          </div>
+                          </a>
                           {g.hf_connection_label && (
                             <div className="text-neutral-600 text-xs mt-0.5">
                               from {g.hf_connection_label}
@@ -1192,6 +1318,8 @@ export default function SyncPage() {
                       </tr>
                     );
                   })}
+                    </Fragment>
+                  ))}
                 </tbody>
               </table>
             </div>

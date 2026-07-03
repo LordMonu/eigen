@@ -115,7 +115,7 @@ interface HFTransaction {
  * 3.5"). Lowercasing + token-sorting collapses those into one key.
  */
 function normName(s: string): string {
-  return (s || '')
+  return canonicalizeName(s)
     .toLowerCase()
     .replace(/[^a-z0-9.]+/g, ' ')
     .trim()
@@ -123,6 +123,65 @@ function normName(s: string): string {
     .filter(Boolean)
     .sort()
     .join(' ')
+}
+
+function canonicalizeName(s: string): string {
+  const raw = (s || '').trim()
+  if (!raw) return raw
+
+  // HF sometimes records the job and the billed transaction under different
+  // product names for the SAME output. Normalize those families first so one
+  // completed job doesn't also appear as an extra FEAT row.
+  if (/\b(voiceover|text\s*to\s*speech|tts)\b/i.test(raw)) {
+    return 'voiceover text to speech'
+  }
+  if (/\b(voice\s*change|voice\s*changer)\b/i.test(raw)) {
+    return 'voice change'
+  }
+
+  return raw
+}
+
+function isAudioLike(value: string): boolean {
+  return /\b(text\s*to\s*speech|tts|voiceover|seed\s*audio|audio|speech|voice)\b/i.test(
+    value || ''
+  )
+}
+
+function collectStringValues(value: unknown, into: string[], seen = new Set<unknown>()) {
+  if (value == null || seen.has(value)) return
+  if (typeof value === 'string') {
+    into.push(value)
+    return
+  }
+  if (typeof value !== 'object') return
+  seen.add(value)
+  if (Array.isArray(value)) {
+    for (const item of value) collectStringValues(item, into, seen)
+    return
+  }
+  for (const nested of Object.values(value as Record<string, unknown>)) {
+    collectStringValues(nested, into, seen)
+  }
+}
+
+function jobMatchKeys(job: HFJob): string[] {
+  const keys = new Set<string>()
+  const add = (value?: string) => {
+    const normalized = normName(value || '')
+    if (normalized) keys.add(normalized)
+  }
+
+  add(job.display_name)
+  add(job.job_set_type)
+
+  const paramStrings: string[] = []
+  collectStringValues(job.params, paramStrings)
+  for (const value of paramStrings) {
+    if (isAudioLike(value)) add(value)
+  }
+
+  return [...keys]
 }
 
 /**
@@ -147,11 +206,12 @@ function attributeToJobs(
     { idx: number; timeMs: number; used: boolean }[]
   >()
   jobs.forEach((j, idx) => {
-    const key = normName(j.display_name)
     const entry = { idx, timeMs: j.created_at * 1000, used: false }
-    const arr = jobsByName.get(key)
-    if (arr) arr.push(entry)
-    else jobsByName.set(key, [entry])
+    for (const key of jobMatchKeys(j)) {
+      const arr = jobsByName.get(key)
+      if (arr) arr.push(entry)
+      else jobsByName.set(key, [entry])
+    }
   })
 
   const credited = new Array<number>(jobs.length).fill(0)
@@ -159,7 +219,20 @@ function attributeToJobs(
   const leftover: HFTransaction[] = []
 
   for (const tx of txs) {
-    const bucket = jobsByName.get(normName(tx.display_name))
+    let bucket = jobsByName.get(normName(tx.display_name))
+    if ((!bucket || bucket.length === 0) && isAudioLike(tx.display_name)) {
+      bucket = jobs
+        .map((job, idx) => ({ job, idx }))
+        .filter(
+          ({ job }) =>
+            isAudioLike(job.display_name) || isAudioLike(job.job_set_type)
+        )
+        .map(({ job, idx }) => ({
+          idx,
+          timeMs: job.created_at * 1000,
+          used: false,
+        }))
+    }
     if (!bucket || bucket.length === 0) {
       leftover.push(tx) // no job of this model → a feature charge
       continue
@@ -252,7 +325,9 @@ function buildFeatureGenerations(
     best.credits -= Math.abs(tx.credits)
   }
 
-  return gens.map(({ _timeMs: _omit, ...g }) => g)
+  return gens
+    .map(({ _timeMs: _omit, ...g }) => g)
+    .filter((g) => g.credits > 0)
 }
 
 // --- Our internal type ---
@@ -261,14 +336,22 @@ export interface Generation {
   displayName: string
   jobSetType: string
   resultUrl: string
-  mediaType: 'image' | 'video' | 'feature'
+  mediaType: 'image' | 'video' | 'audio' | 'feature'
   prompt: string
   credits: number
   createdAt: string
 }
 
-function detectMediaType(url: string): 'image' | 'video' {
-  if (/\.(mp4|mov|webm|avi)$/i.test(url)) return 'video'
+function detectMediaType(
+  url: string,
+  jobSetType?: string,
+  displayName?: string
+): 'image' | 'video' | 'audio' {
+  const cleanUrl = (url || '').split('?')[0].split('#')[0]
+  if (/\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(cleanUrl)) return 'audio'
+  if (/\.(mp4|mov|webm|avi)$/i.test(cleanUrl)) return 'video'
+  if (displayName && isAudioLike(displayName)) return 'audio'
+  if (jobSetType && /\b(audio|speech|voice)\b/i.test(jobSetType)) return 'audio'
   return 'image'
 }
 
@@ -313,7 +396,7 @@ export async function fetchHFGenerations(
     displayName: job.display_name,
     jobSetType: job.job_set_type,
     resultUrl: job.result_url,
-    mediaType: detectMediaType(job.result_url),
+    mediaType: detectMediaType(job.result_url, job.job_set_type, job.display_name),
     prompt: (job.params?.prompt || '').substring(0, 300).trim(),
     credits: spendByJob.credited[idx] - refundByJob.credited[idx],
     createdAt: new Date(job.created_at * 1000).toISOString(),

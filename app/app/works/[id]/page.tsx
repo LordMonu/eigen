@@ -100,7 +100,7 @@ async function WorkDetailContent({ id }: { id: string }) {
     supabase
       .from("generations")
       .select(
-        "id, display_name, result_url, media_type, credits, hf_created_at, work_id, assigned_at, assigned_by, is_waste, is_irrelevant, wasted_at, wasted_by, hf_connection_label",
+        "id, external_id, display_name, result_url, media_type, credits, hf_created_at, work_id, assigned_at, assigned_by, is_waste, is_irrelevant, wasted_at, wasted_by, hf_connection_label",
       )
       .eq("client_id", work.client_id)
       .order("hf_created_at", { ascending: false })

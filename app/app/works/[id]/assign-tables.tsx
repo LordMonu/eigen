@@ -14,7 +14,7 @@
 // the `rework` status. The work-status lookup is passed in from the server
 // component via workStatusMap.
 
-import { useState, useEffect, useTransition } from 'react'
+import { Fragment, useState, useEffect, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -28,6 +28,7 @@ const UNDO_WINDOW_MS = 60000
 
 interface Generation {
   id: string
+  external_id: string
   display_name: string
   result_url: string
   media_type: string
@@ -55,6 +56,35 @@ interface Props {
   readOnly?: boolean
 }
 
+type DayGroup<T> = { label: string; items: T[] }
+
+function dayLabel(iso: string) {
+  const d = new Date(iso)
+  const today = new Date()
+  const startOfDay = (dt: Date) =>
+    new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime()
+  const diffDays = Math.round((startOfDay(today) - startOfDay(d)) / 86400000)
+  if (diffDays === 0) return 'Today'
+  if (diffDays === 1) return 'Yesterday'
+  return d.toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: d.getFullYear() !== today.getFullYear() ? 'numeric' : undefined,
+  })
+}
+
+function groupByDay<T extends { hf_created_at: string }>(rows: T[]): DayGroup<T>[] {
+  const groups: DayGroup<T>[] = []
+  for (const row of rows) {
+    const label = dayLabel(row.hf_created_at)
+    const last = groups[groups.length - 1]
+    if (last && last.label === label) last.items.push(row)
+    else groups.push({ label, items: [row] })
+  }
+  return groups
+}
+
 export function MediaPreview({
   url,
   mediaType,
@@ -64,6 +94,11 @@ export function MediaPreview({
   mediaType: string
   name: string
 }) {
+  const [failed, setFailed] = useState(false)
+  const looksAudio = /\b(text\s*to\s*speech|tts|voiceover|seed\s*audio|audio|speech|voice)\b/i.test(
+    name
+  )
+
   // Feature charges (voiceover, voice change, etc.) have no media URL.
   if (mediaType === 'feature' || !url) {
     return (
@@ -75,6 +110,26 @@ export function MediaPreview({
       </div>
     )
   }
+  if (mediaType === 'audio' || (failed && looksAudio)) {
+    return (
+      <div
+        className="w-32 h-22 2xl:w-40 2xl:h-28 rounded bg-neutral-900 border border-neutral-700 flex items-center justify-center text-[9px] text-sky-300 uppercase tracking-[0.2em]"
+        title={name}
+      >
+        audio
+      </div>
+    )
+  }
+  if (failed) {
+    return (
+      <div
+        className="w-32 h-22 2xl:w-40 2xl:h-28 rounded bg-neutral-800 flex items-center justify-center text-[10px] text-neutral-600"
+        title={name}
+      >
+        —
+      </div>
+    )
+  }
   if (mediaType === 'video') {
     return (
       <video
@@ -82,6 +137,7 @@ export function MediaPreview({
         className="w-32 h-22 2xl:w-40 2xl:h-28 rounded object-cover bg-black"
         preload="metadata"
         muted
+        onError={() => setFailed(true)}
         onMouseEnter={(e) => {
           void (e.currentTarget as HTMLVideoElement).play()
         }}
@@ -100,6 +156,7 @@ export function MediaPreview({
       alt={name}
       className="w-32 h-22 2xl:w-40 2xl:h-28 rounded object-cover bg-neutral-800"
       loading="lazy"
+      onError={() => setFailed(true)}
     />
   )
 }
@@ -334,6 +391,13 @@ export function AssignTables({
   const [wastedPage, setWastedPage] = useState(1)
   const aPag = paginate(assignedUseful, assignedPage)
   const wPag = paginate(wasted, wastedPage)
+  const groupedAssigned = groupByDay(aPag.slice)
+  const groupedWasted = groupByDay(wPag.slice)
+  const groupedIrrelevant = groupByDay(allIrrelevant)
+
+  function hfAssetUrl(externalId: string) {
+    return `https://higgsfield.ai/asset/all/${externalId}`
+  }
 
   // Total credits per bucket
   const totalAssignedCredits = assignedUseful.reduce(
@@ -424,22 +488,43 @@ export function AssignTables({
               <div className="flex-1 overflow-auto">
                 <table className="w-full text-xs">
                   <tbody className="divide-y divide-neutral-800">
-                    {aPag.slice.map((g) => (
+                    {groupedAssigned.map((group) => (
+                    <Fragment key={group.label}>
+                    <tr className="bg-neutral-950/95">
+                      <td colSpan={readOnly ? 3 : 4} className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+                        {group.label}
+                      </td>
+                    </tr>
+                    {group.items.map((g) => (
                     <tr
                       key={g.id}
                       className={g.work_id === workId ? 'bg-lime-950/20' : ''}
                     >
                       <td className="px-2 py-2">
-                        <MediaPreview
-                          url={g.result_url}
-                          mediaType={g.media_type}
-                          name={g.display_name}
-                        />
+                        <a
+                          href={hfAssetUrl(g.external_id)}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Open in Higgsfield"
+                          className="inline-block"
+                        >
+                          <MediaPreview
+                            url={g.result_url}
+                            mediaType={g.media_type}
+                            name={g.display_name}
+                          />
+                        </a>
                       </td>
                       <td className="px-2 py-2">
-                        <div className="font-medium text-white">
+                        <a
+                          href={hfAssetUrl(g.external_id)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium text-white hover:text-lime-300 hover:underline"
+                          title="Open in Higgsfield"
+                        >
                           {g.display_name}
-                        </div>
+                        </a>
                         <div className="text-neutral-500 text-xs mt-0.5 space-y-0.5">
                           {renderReworkTag(g.work_id) && (
                             <div className="flex items-center gap-1.5 flex-wrap">
@@ -479,6 +564,8 @@ export function AssignTables({
                         </td>
                       )}
                     </tr>
+                  ))}
+                  </Fragment>
                   ))}
                 </tbody>
                 </table>
@@ -520,22 +607,43 @@ export function AssignTables({
               <div className="flex-1 overflow-auto">
                 <table className="w-full text-xs">
                   <tbody className="divide-y divide-neutral-800">
-                    {wPag.slice.map((g) => (
+                    {groupedWasted.map((group) => (
+                      <Fragment key={group.label}>
+                      <tr className="bg-neutral-950/95">
+                        <td colSpan={readOnly ? 3 : 4} className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400">
+                          {group.label}
+                        </td>
+                      </tr>
+                    {group.items.map((g) => (
                       <tr
                         key={g.id}
                         className="bg-red-950/10 hover:bg-red-950/20"
                     >
                       <td className="px-2 py-2">
-                        <MediaPreview
-                          url={g.result_url}
-                          mediaType={g.media_type}
-                          name={g.display_name}
-                        />
+                        <a
+                          href={hfAssetUrl(g.external_id)}
+                          target="_blank"
+                          rel="noreferrer"
+                          title="Open in Higgsfield"
+                          className="inline-block"
+                        >
+                          <MediaPreview
+                            url={g.result_url}
+                            mediaType={g.media_type}
+                            name={g.display_name}
+                          />
+                        </a>
                       </td>
                       <td className="px-2 py-2">
-                        <div className="font-medium text-neutral-400 line-through">
+                        <a
+                          href={hfAssetUrl(g.external_id)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-medium text-neutral-400 line-through hover:text-lime-300 hover:underline"
+                          title="Open in Higgsfield"
+                        >
                           {g.display_name}
-                        </div>
+                        </a>
                         <div className="text-xs text-neutral-600 mt-0.5 space-y-0.5">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span>
@@ -578,6 +686,8 @@ export function AssignTables({
                       )}
                     </tr>
                   ))}
+                      </Fragment>
+                    ))}
                 </tbody>
                 </table>
               </div>
@@ -602,7 +712,14 @@ export function AssignTables({
           <div className="overflow-auto max-h-44">
             <table className="w-full text-xs">
               <tbody className="divide-y divide-neutral-800/30">
-                {allIrrelevant.map((g) => (
+                {groupedIrrelevant.map((group) => (
+                  <Fragment key={group.label}>
+                  <tr className="bg-neutral-950/95 opacity-100">
+                    <td colSpan={4} className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-500">
+                      {group.label}
+                    </td>
+                  </tr>
+                {group.items.map((g) => (
                   <tr key={g.id} className="opacity-40">
                     <td className="px-2 py-1.5">
                       <MediaPreview url={g.result_url} mediaType={g.media_type} name={g.display_name} />
@@ -615,6 +732,8 @@ export function AssignTables({
                       {parseFloat(g.credits) > 0 ? parseFloat(g.credits).toFixed(1) : 'free'}
                     </td>
                   </tr>
+                ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>
