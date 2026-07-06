@@ -422,6 +422,18 @@ export function SyncAndAssign({
     });
   }
 
+  function toggleSelectDay(items: UnassignedGeneration[]) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = items.every((g) => next.has(g.id));
+      items.forEach((g) => {
+        if (allSelected) next.delete(g.id);
+        else next.add(g.id);
+      });
+      return next;
+    });
+  }
+
   const allVisibleSelected =
     unassigned.length > 0 && unassigned.every((g) => selectedIds.has(g.id));
 
@@ -860,60 +872,78 @@ export function SyncAndAssign({
                       </div>
                     )}
                     <div className="divide-y divide-neutral-800">
-                      {groupedUnassigned.map((group) => (
-                        <section key={group.label} className="px-4 py-4">
-                          <div className="mb-4 text-sm font-semibold text-white">
-                            {group.label}
-                          </div>
-                          <div className="grid grid-cols-2 gap-3 md:grid-cols-5 xl:grid-cols-10">
-                            {group.items.map((g) => {
-                              const checked = selectedIds.has(g.id);
-                              return (
-                                <a
-                                  key={g.id}
-                                  href={hfAssetUrl(g.external_id)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  title="Open in Higgsfield"
-                                  className={`group relative block aspect-square rounded-[1.75rem] xl:rounded-4xl border bg-neutral-950 transition overflow-hidden ${
-                                    checked
-                                      ? "border-lime-400 shadow-[0_0_0_1px_rgba(163,230,53,0.45)]"
-                                      : "border-neutral-800 hover:border-neutral-600"
-                                  }`}
-                                >
-                                  <button
-                                    type="button"
-                                    aria-pressed={checked}
-                                    aria-label={
+                      {groupedUnassigned.map((group) => {
+                        const daySelected =
+                          group.items.length > 0 &&
+                          group.items.every((g) => selectedIds.has(g.id));
+                        return (
+                          <section key={group.label} className="px-4 py-4">
+                            <button
+                              type="button"
+                              onClick={() => toggleSelectDay(group.items)}
+                              className="mb-4 flex items-center gap-2 text-sm font-semibold text-white transition hover:text-lime-300"
+                            >
+                              <span
+                                className={`flex size-5 items-center justify-center rounded border-2 transition ${
+                                  daySelected
+                                    ? "border-lime-400 bg-lime-400 text-black"
+                                    : "border-neutral-600 bg-transparent text-transparent"
+                                }`}
+                              >
+                                <Check className="size-3" />
+                              </span>
+                              <span>{group.label}</span>
+                            </button>
+                            <div className="grid grid-cols-2 gap-3 md:grid-cols-5 xl:grid-cols-10">
+                              {group.items.map((g) => {
+                                const checked = selectedIds.has(g.id);
+                                return (
+                                  <a
+                                    key={g.id}
+                                    href={hfAssetUrl(g.external_id)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    title="Open in Higgsfield"
+                                    className={`group relative block aspect-square rounded-[1.75rem] xl:rounded-4xl border bg-neutral-950 transition overflow-hidden ${
                                       checked
-                                        ? `Deselect ${g.display_name}`
-                                        : `Select ${g.display_name}`
-                                    }
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      toggleSelect(g.id);
-                                    }}
-                                    className={`absolute left-3 top-3 z-10 flex size-8 items-center justify-center rounded-xl border-2 backdrop-blur-sm transition ${
-                                      checked
-                                        ? "border-lime-400 bg-lime-400 text-black"
-                                        : "border-white/25 bg-black/35 text-transparent hover:border-white/45"
+                                        ? "border-lime-400 shadow-[0_0_0_1px_rgba(163,230,53,0.45)]"
+                                        : "border-neutral-800 hover:border-neutral-600"
                                     }`}
                                   >
-                                    <Check className="size-4" />
-                                  </button>
-                                  <MediaPreview
-                                    url={g.result_url}
-                                    mediaType={g.media_type}
-                                    name={g.display_name}
-                                    className="h-full w-full object-cover"
-                                  />
-                                </a>
-                              );
-                            })}
-                          </div>
-                        </section>
-                      ))}
+                                    <button
+                                      type="button"
+                                      aria-pressed={checked}
+                                      aria-label={
+                                        checked
+                                          ? `Deselect ${g.display_name}`
+                                          : `Select ${g.display_name}`
+                                      }
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        toggleSelect(g.id);
+                                      }}
+                                      className={`absolute left-3 top-3 z-10 flex size-8 items-center justify-center rounded-xl border-2 backdrop-blur-sm transition ${
+                                        checked
+                                          ? "border-lime-400 bg-lime-400 text-black"
+                                          : "border-white/25 bg-black/35 text-transparent hover:border-white/45"
+                                      }`}
+                                    >
+                                      <Check className="size-4" />
+                                    </button>
+                                    <MediaPreview
+                                      url={g.result_url}
+                                      mediaType={g.media_type}
+                                      name={g.display_name}
+                                      className="h-full w-full object-cover"
+                                    />
+                                  </a>
+                                );
+                              })}
+                            </div>
+                          </section>
+                        );
+                      })}
                     </div>
                   </>
                 )}
