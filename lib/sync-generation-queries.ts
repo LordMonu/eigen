@@ -127,13 +127,19 @@ export async function fetchSyncTabPage<T>(
   tab: SyncTab,
   page: number,
   accountLabel?: string | null,
+  options?: {
+    pageSize?: number
+    excludeFeatures?: boolean
+    count?: 'exact'
+  },
 ) {
-  const from = (page - 1) * PAGE_SIZE
-  const to = from + PAGE_SIZE - 1
+  const pageSize = options?.pageSize ?? PAGE_SIZE
+  const from = (page - 1) * pageSize
+  const to = from + pageSize - 1
 
   let query = supabase
     .from('generations')
-    .select(SYNC_GEN_COLS)
+    .select(SYNC_GEN_COLS, options?.count ? { count: options.count } : undefined)
     .order('hf_created_at', { ascending: false })
     .order('id', { ascending: false })
     .range(from, to)
@@ -144,6 +150,10 @@ export async function fetchSyncTabPage<T>(
     query = query.eq('hf_connection_label', accountLabel)
   }
 
-  const { data, error } = await query
-  return { data: (data || []) as T[], error }
+  if (options?.excludeFeatures) {
+    query = query.neq('media_type', 'feature')
+  }
+
+  const { data, error, count } = await query
+  return { data: (data || []) as T[], error, count }
 }
