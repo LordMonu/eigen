@@ -10,7 +10,7 @@ interface PageProps {
 }
 
 export default async function ClientReportPage({ params, searchParams }: PageProps) {
-  await requireRole(['master', 'manager'])
+  await requireRole(['master', 'manager', 'head_designer'])
   const { id: clientId } = await params
   const sp = await searchParams
   const supabase = await createClient()

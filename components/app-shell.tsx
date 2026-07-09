@@ -29,7 +29,7 @@ function membershipKey(m: ShellMembership) {
 
 const AppHeader = memo(function AppHeader({ orgName }: { orgName: string }) {
   return (
-    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-neutral-800 bg-black px-4">
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-neutral-800 bg-black px-4 lg:hidden">
       <SidebarTrigger className="text-neutral-400" />
       <Separator
         orientation="vertical"
@@ -68,7 +68,7 @@ export function AppShell({ membership, children }: AppShellProps) {
         <SidebarChrome membership={stableMembership.current} />
         <SidebarInset className="flex h-svh max-h-svh min-h-0 flex-col overflow-hidden bg-black">
           <AppHeader orgName={stableMembership.current.org_name} />
-          <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto lg:pt-0">{children}</div>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>

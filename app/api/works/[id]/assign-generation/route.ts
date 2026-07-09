@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { logActivity } from '@/lib/activity-log'
+import { isManagerLikeRole } from '@/lib/roles'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -65,7 +66,7 @@ export async function POST(
     }
     const canAssign =
       membership.role === 'master' ||
-      membership.role === 'manager' ||
+      isManagerLikeRole(membership.role) ||
       (!isCrossClient && isCreator)
     if (!canAssign) {
       return NextResponse.json(

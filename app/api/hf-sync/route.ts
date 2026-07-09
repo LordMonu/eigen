@@ -9,6 +9,7 @@ import {
   NoHFConnectionError,
 } from '@/lib/hf-connection'
 import { createClient } from '@/lib/supabase-server'
+import type { Role } from '@/lib/roles'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
         { status: 403 }
       )
     }
-    const role = membership.role as 'master' | 'manager' | 'creator'
+    const role = membership.role as Role
 
     const results = await forEachAccessibleConnection<{
       generations: Generation[]

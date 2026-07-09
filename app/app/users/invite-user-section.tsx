@@ -13,12 +13,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { X, Check } from 'lucide-react'
-
-type Role = 'master' | 'manager' | 'creator'
+import type { Role } from '@/lib/roles'
 
 const ROLE_LABELS: Record<Role, string> = {
   master: 'Master',
   manager: 'Manager',
+  head_designer: 'Head Designer',
   creator: 'Creator',
 }
 
@@ -217,6 +217,7 @@ export function InviteUserSection({ orgId, connections, initialInvitations }: Pr
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="creator">Creator</SelectItem>
+                <SelectItem value="head_designer">Head Designer</SelectItem>
                 <SelectItem value="manager">Manager</SelectItem>
                 <SelectItem value="master">Master</SelectItem>
               </SelectContent>

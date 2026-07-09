@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
+import { isManagerLikeRole } from '@/lib/roles'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -17,7 +18,10 @@ export async function POST() {
       .eq('user_id', user.id)
       .eq('status', 'active')
       .maybeSingle()
-    if (!membership || !['master', 'manager'].includes(membership.role)) {
+    if (
+      !membership ||
+      (membership.role !== 'master' && !isManagerLikeRole(membership.role))
+    ) {
       return NextResponse.json({ error: 'Only master/manager can create R&D client' }, { status: 403 })
     }
 

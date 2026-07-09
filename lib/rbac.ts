@@ -4,14 +4,15 @@
  * Single source of truth for all page / section / button / action permissions.
  * To change any access: flip yes → no or no → yes. Nothing else needs to change.
  *
- * Roles: master | manager | creator
+ * Roles: master | manager | head_designer | creator
  *
  * How it's used in code:
  *   import { can } from '@/lib/rbac'
  *   if (can(membership.role, 'clients', 'create')) { ... }
  */
 
-export type Role = "master" | "manager" | "creator";
+import type { Role } from "./roles";
+export type { Role } from "./roles";
 
 export type Permission = "view" | "create" | "edit" | "delete";
 
@@ -26,6 +27,7 @@ export const ACCESS = {
   dashboard: {
     master: { view: true, create: false, edit: false, delete: false },
     manager: { view: true, create: false, edit: false, delete: false },
+    head_designer: { view: true, create: false, edit: false, delete: false },
     creator: { view: true, create: false, edit: false, delete: false },
     //        ^^ creator sees personal view (own works/credits), not org-wide
   },
@@ -34,6 +36,7 @@ export const ACCESS = {
   clients: {
     master: { view: true, create: true, edit: true, delete: true },
     manager: { view: true, create: true, edit: true, delete: true },
+    head_designer: { view: true, create: true, edit: true, delete: true },
     creator: { view: true, create: false, edit: false, delete: false },
   },
 
@@ -41,6 +44,7 @@ export const ACCESS = {
   clients_status: {
     master: { view: true, create: false, edit: true, delete: false },
     manager: { view: true, create: false, edit: true, delete: false },
+    head_designer: { view: true, create: false, edit: true, delete: false },
     creator: { view: true, create: false, edit: false, delete: false },
   },
 
@@ -48,6 +52,7 @@ export const ACCESS = {
   works: {
     master: { view: true, create: true, edit: true, delete: true },
     manager: { view: true, create: true, edit: true, delete: true },
+    head_designer: { view: true, create: true, edit: true, delete: true },
     creator: { view: true, create: false, edit: false, delete: false },
     //        ^^ creator view is scoped to their own works via RLS
   },
@@ -56,6 +61,7 @@ export const ACCESS = {
   works_submit_review: {
     master: { view: false, create: false, edit: false, delete: false },
     manager: { view: false, create: false, edit: false, delete: false },
+    head_designer: { view: false, create: false, edit: false, delete: false },
     creator: { view: true, create: false, edit: true, delete: false },
     //        ^^ only own works — enforced server-side in /api/works/[id]/status
   },
@@ -64,6 +70,7 @@ export const ACCESS = {
   works_review_actions: {
     master: { view: true, create: false, edit: true, delete: false },
     manager: { view: true, create: false, edit: true, delete: false },
+    head_designer: { view: true, create: false, edit: true, delete: false },
     creator: { view: false, create: false, edit: false, delete: false },
   },
 
@@ -71,6 +78,7 @@ export const ACCESS = {
   works_pause: {
     master: { view: true, create: false, edit: true, delete: false },
     manager: { view: true, create: false, edit: true, delete: false },
+    head_designer: { view: true, create: false, edit: true, delete: false },
     creator: { view: false, create: false, edit: false, delete: false },
   },
 
@@ -78,6 +86,7 @@ export const ACCESS = {
   sync: {
     master: { view: true, create: false, edit: true, delete: false },
     manager: { view: true, create: false, edit: true, delete: false },
+    head_designer: { view: true, create: false, edit: true, delete: false },
     creator: { view: true, create: false, edit: true, delete: false },
     //        ^^ everyone can sync + assign; RLS controls which generations they see
   },
@@ -86,6 +95,7 @@ export const ACCESS = {
   work_assign: {
     master: { view: true, create: false, edit: true, delete: false },
     manager: { view: true, create: false, edit: true, delete: false },
+    head_designer: { view: true, create: false, edit: true, delete: false },
     creator: { view: true, create: false, edit: true, delete: false },
     //        ^^ creator can assign to their own works only — enforced server-side
   },
@@ -94,6 +104,7 @@ export const ACCESS = {
   reports: {
     master: { view: true, create: false, edit: false, delete: false },
     manager: { view: false, create: false, edit: false, delete: false },
+    head_designer: { view: false, create: false, edit: false, delete: false },
     creator: { view: false, create: false, edit: false, delete: false },
   },
 
@@ -101,6 +112,7 @@ export const ACCESS = {
   reports_export: {
     master: { view: true, create: true, edit: false, delete: false },
     manager: { view: false, create: false, edit: false, delete: false },
+    head_designer: { view: false, create: false, edit: false, delete: false },
     creator: { view: false, create: false, edit: false, delete: false },
   },
 
@@ -108,6 +120,7 @@ export const ACCESS = {
   users: {
     master: { view: true, create: false, edit: true, delete: true },
     manager: { view: true, create: false, edit: false, delete: false },
+    head_designer: { view: true, create: false, edit: false, delete: false },
     creator: { view: false, create: false, edit: false, delete: false },
     //        ^^ manager sees read-only list for work assignment, cannot approve/edit/delete
   },
@@ -116,6 +129,7 @@ export const ACCESS = {
   users_approvals: {
     master: { view: true, create: false, edit: true, delete: true },
     manager: { view: false, create: false, edit: false, delete: false },
+    head_designer: { view: false, create: false, edit: false, delete: false },
     creator: { view: false, create: false, edit: false, delete: false },
   },
 
@@ -123,6 +137,7 @@ export const ACCESS = {
   users_role_edit: {
     master: { view: true, create: false, edit: true, delete: false },
     manager: { view: false, create: false, edit: false, delete: false },
+    head_designer: { view: false, create: false, edit: false, delete: false },
     creator: { view: false, create: false, edit: false, delete: false },
   },
 
@@ -130,6 +145,7 @@ export const ACCESS = {
   users_remove: {
     master: { view: true, create: false, edit: false, delete: true },
     manager: { view: false, create: false, edit: false, delete: false },
+    head_designer: { view: false, create: false, edit: false, delete: false },
     creator: { view: false, create: false, edit: false, delete: false },
   },
 
@@ -137,6 +153,7 @@ export const ACCESS = {
   users_hf_grants: {
     master: { view: true, create: true, edit: true, delete: true },
     manager: { view: false, create: false, edit: false, delete: false },
+    head_designer: { view: false, create: false, edit: false, delete: false },
     creator: { view: false, create: false, edit: false, delete: false },
   },
 
@@ -144,6 +161,7 @@ export const ACCESS = {
   settings: {
     master: { view: true, create: false, edit: false, delete: false },
     manager: { view: false, create: false, edit: false, delete: false },
+    head_designer: { view: false, create: false, edit: false, delete: false },
     creator: { view: false, create: false, edit: false, delete: false },
     //        ^^ non-masters get a stripped "leave org" view, not full settings
   },
@@ -152,6 +170,7 @@ export const ACCESS = {
   settings_hf_connections: {
     master: { view: true, create: true, edit: true, delete: true },
     manager: { view: false, create: false, edit: false, delete: false },
+    head_designer: { view: false, create: false, edit: false, delete: false },
     creator: { view: false, create: false, edit: false, delete: false },
   },
 
@@ -159,6 +178,7 @@ export const ACCESS = {
   settings_video_types: {
     master: { view: true, create: true, edit: true, delete: true },
     manager: { view: false, create: false, edit: false, delete: false },
+    head_designer: { view: false, create: false, edit: false, delete: false },
     creator: { view: false, create: false, edit: false, delete: false },
   },
 
@@ -166,6 +186,7 @@ export const ACCESS = {
   settings_org: {
     master: { view: true, create: false, edit: true, delete: false },
     manager: { view: false, create: false, edit: false, delete: false },
+    head_designer: { view: false, create: false, edit: false, delete: false },
     creator: { view: false, create: false, edit: false, delete: false },
   },
 
@@ -173,6 +194,7 @@ export const ACCESS = {
   settings_delete_org: {
     master: { view: true, create: false, edit: false, delete: true },
     manager: { view: false, create: false, edit: false, delete: false },
+    head_designer: { view: false, create: false, edit: false, delete: false },
     creator: { view: false, create: false, edit: false, delete: false },
   },
 
@@ -180,6 +202,7 @@ export const ACCESS = {
   settings_leave_org: {
     master: { view: false, create: false, edit: false, delete: false },
     manager: { view: true, create: false, edit: false, delete: true },
+    head_designer: { view: true, create: false, edit: false, delete: true },
     creator: { view: true, create: false, edit: false, delete: true },
   },
 
@@ -189,6 +212,7 @@ export const ACCESS = {
   studio: {
     master: { view: true, create: true, edit: true, delete: true },
     manager: { view: true, create: true, edit: true, delete: true },
+    head_designer: { view: true, create: true, edit: true, delete: true },
     creator: { view: true, create: true, edit: true, delete: false },
   },
 } satisfies Record<string, AccessMap>;

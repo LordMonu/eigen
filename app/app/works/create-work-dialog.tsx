@@ -57,6 +57,9 @@ interface Props {
   clientName: string
   /** Pre-fill the schedule range to a single day (YYYY-MM-DD). */
   initialDate?: string
+  mode?: 'full' | 'quick'
+  onCreated?: (work: { id: string; title: string | null; clientId: string }) => void
+  redirectOnCreate?: boolean
 }
 
 export function CreateWorkDialog({
@@ -65,13 +68,20 @@ export function CreateWorkDialog({
   clientId,
   clientName,
   initialDate,
+  mode = 'full',
+  onCreated,
+  redirectOnCreate = true,
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="bg-neutral-950 border-neutral-800 text-white p-0
-                   w-[min(90vw,72rem)] sm:max-w-[min(90vw,72rem)]
-                   h-[90vh] grid-rows-[auto_1fr_auto] gap-0"
+        className={
+          mode === 'quick'
+            ? 'bg-neutral-950 border-neutral-800 text-white p-0 sm:max-w-md'
+            : `bg-neutral-950 border-neutral-800 text-white p-0
+               w-[min(90vw,72rem)] sm:max-w-[min(90vw,72rem)]
+               h-[90vh] grid-rows-[auto_1fr_auto] gap-0`
+        }
       >
         {/* Fresh mount each open → fields reset via useState defaults (no effect). */}
         {open && (
@@ -80,6 +90,9 @@ export function CreateWorkDialog({
             clientName={clientName}
             initialDate={initialDate}
             onOpenChange={onOpenChange}
+            mode={mode}
+            onCreated={onCreated}
+            redirectOnCreate={redirectOnCreate}
           />
         )}
       </DialogContent>
@@ -92,15 +105,21 @@ function WorkForm({
   clientName,
   initialDate,
   onOpenChange,
+  mode,
+  onCreated,
+  redirectOnCreate,
 }: {
   clientId: string
   clientName: string
   initialDate?: string
   onOpenChange: (open: boolean) => void
+  mode: 'full' | 'quick'
+  onCreated?: (work: { id: string; title: string | null; clientId: string }) => void
+  redirectOnCreate: boolean
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
-  const [step, setStep] = useState(1)
+  const [step, setStep] = useState(mode === 'quick' ? 2 : 1)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -202,9 +221,13 @@ function WorkForm({
   }
 
   async function handleSubmit() {
-    if (creatorIds.length === 0) {
+    if (mode === 'full' && creatorIds.length === 0) {
       setError('Pick at least one creator')
       setStep(2)
+      return
+    }
+    if (mode === 'quick' && !title.trim()) {
+      setError('Work title is required')
       return
     }
     setSubmitting(true)
@@ -241,10 +264,12 @@ function WorkForm({
         if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`)
       }
 
+      const selectedCreatorIds = creatorIds.length > 0 ? creatorIds : [user.id]
+
       // creator_id stays as the "primary" creator — the head of the
-      // creators list. Every picked creator (including this one) also lands
+      // creators list. Every picked creator (including that one) also lands
       // in work_creators so co-ownership is the source of truth.
-      const primaryCreatorId = creatorIds[0]
+      const primaryCreatorId = selectedCreatorIds[0]
 
       const { error: insertError } = await supabase.from('works').insert({
         id: workId,
@@ -272,7 +297,7 @@ function WorkForm({
       }
 
       // Co-owners go into the work_creators join table.
-      const creatorRows = creatorIds.map((uid) => ({
+      const creatorRows = selectedCreatorIds.map((uid) => ({
         work_id: workId,
         user_id: uid,
         added_by: user.id,
@@ -291,8 +316,8 @@ function WorkForm({
         setError(
           `Work created, but co-owner setup failed (${wcErr.message}). ` +
             `Open the work and use Edit to add ${
-              creatorIds.length - 1
-            } co-owner${creatorIds.length - 1 === 1 ? '' : 's'} manually.`,
+              selectedCreatorIds.length - 1
+            } co-owner${selectedCreatorIds.length - 1 === 1 ? '' : 's'} manually.`,
         )
         // Don't redirect — let the user read the message and decide.
         return
@@ -305,10 +330,18 @@ function WorkForm({
         body: JSON.stringify({ entityType: 'work', entityId: workId, action: 'created', toValue: title.trim() || null }),
       }).catch(() => {})
 
+      onCreated?.({
+        id: workId,
+        title: title.trim() || null,
+        clientId,
+      })
+
       onOpenChange(false)
       startTransition(() => {
         router.refresh()
-        router.push(`/app/works/${workId}`)
+        if (redirectOnCreate) {
+          router.push(`/app/works/${workId}`)
+        }
       })
     } catch (err) {
       console.error('[create-work] error:', err)
@@ -323,13 +356,14 @@ function WorkForm({
       <DialogHeader className="px-6 pt-6 pb-4 border-b border-neutral-800">
         <DialogTitle>Create Work for {clientName}</DialogTitle>
         <DialogDescription className="text-neutral-400">
-          Step {step} of 3
+          {mode === 'quick' ? 'Quick create' : `Step ${step} of 3`}
         </DialogDescription>
       </DialogHeader>
 
       <div className="px-6 py-4 overflow-y-auto min-h-0">
 
       {/* STEPPER */}
+      {mode === 'full' && (
       <div className="flex items-center gap-2 mb-2">
         {[1, 2, 3].map((s) => (
           <div key={s} className="flex items-center flex-1">
@@ -355,6 +389,7 @@ function WorkForm({
           </div>
         ))}
       </div>
+      )}
 
       {/* STEP 1: SCHEDULE */}
       {step === 1 && (
@@ -444,14 +479,20 @@ function WorkForm({
       {step === 2 && (
         <div className="space-y-4 py-2">
           <div>
-            <Label className="text-neutral-300">Title (optional)</Label>
+            <Label className="text-neutral-300">
+              {mode === 'quick' ? 'Work title' : 'Title (optional)'}
+            </Label>
             <Input
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitle(e.target.value)
+                if (error) setError(null)
+              }}
               placeholder="e.g. Q3 UGC Reel Series"
               className="mt-1 bg-neutral-900 border-neutral-700 text-white"
             />
           </div>
+          {mode === 'full' && (
           <div>
             <Label className="text-neutral-300 flex items-center justify-between">
               <span>Creators *</span>
@@ -529,6 +570,8 @@ function WorkForm({
               )}
             </div>
           </div>
+          )}
+          {mode === 'full' && (
           <div>
             <Label className="text-neutral-300">Video Type (optional)</Label>
             {!addingType ? (
@@ -592,6 +635,8 @@ function WorkForm({
               </div>
             )}
           </div>
+          )}
+          {mode === 'full' && (
           <div>
             <Label className="text-neutral-300">Max credits (optional)</Label>
             <Input
@@ -606,11 +651,12 @@ function WorkForm({
               Soft limit. Useful for budget tracking; not enforced.
             </p>
           </div>
+          )}
         </div>
       )}
 
       {/* STEP 3: INSTRUCTIONS */}
-      {step === 3 && (
+      {mode === 'full' && step === 3 && (
         <div className="space-y-4 py-2">
           <p className="text-sm text-neutral-400">
             Add a creative brief, references, or any notes for the creator.
@@ -667,9 +713,17 @@ function WorkForm({
           onClick={() => (step > 1 ? setStep(step - 1) : onOpenChange(false))}
           disabled={submitting || isPending}
         >
-          {step === 1 ? 'Cancel' : 'Back'}
+          {mode === 'quick' || step === 1 ? 'Cancel' : 'Back'}
         </Button>
-        {step < 3 ? (
+        {mode === 'quick' ? (
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting || isPending || !title.trim()}
+            className="bg-lime-400 hover:bg-lime-300 text-black font-semibold"
+          >
+            {submitting ? 'Creating…' : isPending ? 'Updating…' : 'Create Work'}
+          </Button>
+        ) : step < 3 ? (
           <Button
             onClick={() => {
               if (step === 2 && creatorIds.length === 0) {

@@ -13,6 +13,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { decrypt, encrypt } from './hf-crypto'
 import { refreshTokens, expiresAtFrom } from './hf-auth'
 import { HFUnauthorizedError } from './hf-adapter'
+import type { Role } from './roles'
+import { isManagerLikeRole } from './roles'
 
 export class NoHFConnectionError extends Error {
   constructor() {
@@ -34,9 +36,9 @@ async function listAccessibleConnections(
   supabase: SupabaseClient,
   orgId: string,
   userId: string,
-  role: 'master' | 'manager' | 'creator'
+  role: Role
 ): Promise<ConnRow[]> {
-  if (role === 'master' || role === 'manager') {
+  if (role === 'master' || isManagerLikeRole(role)) {
     const { data } = await supabase
       .from('hf_connections')
       .select('id, label, hf_email, access_token_enc, refresh_token_enc')
@@ -106,7 +108,7 @@ export async function forEachAccessibleConnection<T>(
   supabase: SupabaseClient,
   orgId: string,
   userId: string,
-  role: 'master' | 'manager' | 'creator',
+  role: Role,
   fn: (accessToken: string, conn: { id: string; label: string }) => Promise<T>,
   connectionId?: string
 ): Promise<ConnectionResult<T>[]> {

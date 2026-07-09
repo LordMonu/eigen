@@ -14,6 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
+import { isManagerLikeRole } from '@/lib/roles'
 
 interface RouteContext {
   params: Promise<{ id: string }>
@@ -119,7 +120,8 @@ export async function PATCH(req: NextRequest, { params }: RouteContext) {
     // check explicitly so the user gets a clean 403 instead of an empty
     // update that silently does nothing.
     const isOwn = outcome.recorded_by === user.id
-    const isPrivileged = ['master', 'manager'].includes(membership.role)
+    const isPrivileged =
+      membership.role === 'master' || isManagerLikeRole(membership.role)
     if (!isOwn && !isPrivileged) {
       return NextResponse.json(
         { error: 'Only the recorder or master/manager can edit this outcome' },
@@ -203,7 +205,10 @@ export async function DELETE(_req: NextRequest, { params }: RouteContext) {
     // Outcome deletion is master/manager only. The RLS policy also enforces
     // this; the explicit check here returns a clean 403 rather than an empty
     // delete result for creators who try.
-    if (!['master', 'manager'].includes(membership.role)) {
+    if (
+      membership.role !== 'master' &&
+      !isManagerLikeRole(membership.role)
+    ) {
       return NextResponse.json(
         { error: 'Only master/manager can delete outcomes' },
         { status: 403 },

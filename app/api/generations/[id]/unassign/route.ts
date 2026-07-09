@@ -9,6 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import { logActivity } from '@/lib/activity-log'
+import { isManagerLikeRole } from '@/lib/roles'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -52,7 +53,7 @@ export async function POST(
     }
 
     const isMasterOrManager =
-      membership.role === 'master' || membership.role === 'manager'
+      membership.role === 'master' || isManagerLikeRole(membership.role)
 
     if (!isMasterOrManager) {
       // Creator: ownership + recency check. We accept the action if EITHER

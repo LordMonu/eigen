@@ -11,7 +11,7 @@ import { InviteUserSection } from './invite-user-section'
 import { ActivityLog } from '@/components/ui/activity-log'
 
 export default async function UsersPage() {
-  const membership = await requireRole(['master', 'manager'])
+  const membership = await requireRole(['master', 'manager', 'head_designer'])
   const supabase = await createClient()
 
   const [
@@ -149,7 +149,7 @@ export default async function UsersPage() {
         </div>
         <div className="divide-y divide-neutral-800">
           {active?.map((a) => {
-            const role = a.role as 'master' | 'manager' | 'creator'
+            const role = a.role as 'master' | 'manager' | 'head_designer' | 'creator'
             const isYou = a.user_id === membership.user_id
             const isLastMaster = role === 'master' && masterCount <= 1
             return (

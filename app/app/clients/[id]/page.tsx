@@ -552,7 +552,7 @@ async function ClientDetailContent({
           hf_connection_label: g.hf_connection_label,
         }))}
         workTitles={workTitles}
-        userRole={membership.role as "master" | "manager" | "creator"}
+        userRole={membership.role}
         userId={membership.user_id}
         accounts={accounts}
       />

@@ -1,3 +1,6 @@
+import type { Role } from "@/lib/roles";
+import { isManagerLikeRole } from "@/lib/roles";
+
 // lib/work-helpers.ts — work status constants, transitions, helpers.
 
 export const WORK_STATUSES = [
@@ -38,7 +41,7 @@ type Transition = {
  */
 export function allowedTransitions(
   currentStatus: WorkStatus,
-  role: "master" | "manager" | "creator",
+  role: Role,
   isOwnWork: boolean,
 ): Transition[] {
   const transitions: Transition[] = [];
@@ -46,7 +49,7 @@ export function allowedTransitions(
   // Creator or owning manager on their own work: ongoing/rework → in_review
   if (
     isOwnWork &&
-    (role === "creator" || role === "manager") &&
+    (role === "creator" || isManagerLikeRole(role)) &&
     (currentStatus === "ongoing" || currentStatus === "rework")
   ) {
     transitions.push({
@@ -57,7 +60,7 @@ export function allowedTransitions(
   }
 
   // Master/manager actions
-  if (role === "master" || role === "manager") {
+  if (role === "master" || isManagerLikeRole(role)) {
     if (currentStatus === "ongoing" || currentStatus === "rework") {
       transitions.push({ to: "paused", label: "Pause", variant: "secondary" });
     }

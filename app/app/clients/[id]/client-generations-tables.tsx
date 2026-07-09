@@ -18,6 +18,7 @@ import {
 } from '@/app/app/works/[id]/assign-tables'
 import Link from 'next/link'
 import { PaginationButtons, paginate } from '@/components/ui/pagination-buttons'
+import type { Role } from '@/lib/roles'
 
 interface Generation {
   id: string
@@ -40,7 +41,7 @@ interface Props {
   generations: Generation[]
   /** work_id → title, for the small "via work" hint per row. */
   workTitles: Record<string, string>
-  userRole: 'master' | 'manager' | 'creator'
+  userRole: Role
   userId: string
   accounts: { id: string; label: string }[]
 }

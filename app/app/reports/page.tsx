@@ -27,7 +27,7 @@ interface PageProps {
 }
 
 export default async function ReportsPage({ searchParams }: PageProps) {
-  const membership = await requireRole(['master', 'manager'])
+  const membership = await requireRole(['master', 'manager', 'head_designer'])
   const params = await searchParams
   const supabase = await createClient()
 

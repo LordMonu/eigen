@@ -41,8 +41,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from '@/components/ui/sidebar'
-
-type Role = 'master' | 'manager' | 'creator'
+import type { Role } from '@/lib/roles'
 
 function AppSidebarInner({
   orgName,

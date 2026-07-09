@@ -3,11 +3,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase-server'
 import type { WorkStatus } from '@/lib/work-helpers'
 import { logActivity } from '@/lib/activity-log'
+import type { Role } from '@/lib/roles'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
-
-type Role = 'master' | 'manager' | 'creator'
 
 const ALLOWED: Record<
   WorkStatus,
@@ -15,15 +14,15 @@ const ALLOWED: Record<
 > = {
   in_review: [
     {
-      roles: ['creator', 'manager'],
+      roles: ['creator', 'manager', 'head_designer'],
       from: ['ongoing', 'rework'],
       ownWorkOnly: true,
     },
   ],
-  paused: [{ roles: ['master', 'manager'], from: ['ongoing', 'rework'] }],
-  ongoing: [{ roles: ['master', 'manager'], from: ['paused'] }],
-  rework: [{ roles: ['master', 'manager'], from: ['in_review'] }],
-  completed: [{ roles: ['master', 'manager'], from: ['in_review'] }],
+  paused: [{ roles: ['master', 'manager', 'head_designer'], from: ['ongoing', 'rework'] }],
+  ongoing: [{ roles: ['master', 'manager', 'head_designer'], from: ['paused'] }],
+  rework: [{ roles: ['master', 'manager', 'head_designer'], from: ['in_review'] }],
+  completed: [{ roles: ['master', 'manager', 'head_designer'], from: ['in_review'] }],
 }
 
 export async function PATCH(

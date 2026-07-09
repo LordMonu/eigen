@@ -14,6 +14,7 @@ import {
   markSynced,
   getCooldownRemaining,
 } from "@/lib/sync-cooldown";
+import type { Role } from "@/lib/roles";
 
 interface UnassignedGeneration {
   id: string;
@@ -81,7 +82,7 @@ interface Props {
   workTitle: string;
   clientId: string;
   clientName: string;
-  userRole: "master" | "manager" | "creator";
+  userRole: Role;
   creatorStats: CreatorStat[];
   accounts: Account[];
   readOnly?: boolean;
@@ -150,6 +151,14 @@ function MediaPreview({
           preload="metadata"
           muted
           onError={() => setFailed(true)}
+          onMouseEnter={(e) => {
+            void (e.currentTarget as HTMLVideoElement).play();
+          }}
+          onMouseLeave={(e) => {
+            const video = e.currentTarget as HTMLVideoElement;
+            video.pause();
+            video.currentTime = 0;
+          }}
         />
       </div>
     );
@@ -1075,7 +1084,7 @@ export function SyncAndAssign({
                   ? "Marking…"
                   : isPending
                     ? "Updating…"
-                    : "Irrelevant"}
+                    : "R&D"}
               </Button>
               <Button
                 variant="outline"

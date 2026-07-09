@@ -190,16 +190,8 @@ async function WorkDetailContent({ id }: { id: string }) {
   }
   const isClientArchived = !!client?.deleted_at;
   const isArchived = !!work.deleted_at || isClientArchived;
-  const canEdit = !isArchived && can(
-    membership.role as "master" | "manager" | "creator",
-    "works",
-    "edit",
-  );
-  const canDelete = !isArchived && can(
-    membership.role as "master" | "manager" | "creator",
-    "works",
-    "delete",
-  );
+  const canEdit = !isArchived && can(membership.role, "works", "edit");
+  const canDelete = !isArchived && can(membership.role, "works", "delete");
 
   const clientLocked =
     client?.status === "paused" || client?.status === "ended";
@@ -380,7 +372,7 @@ async function WorkDetailContent({ id }: { id: string }) {
           workTitle={work.title || work.video_type || "Untitled work"}
           clientId={work.client_id}
           clientName={client?.name || ""}
-          userRole={membership.role as "master" | "manager" | "creator"}
+          userRole={membership.role}
           creatorStats={creatorStats}
           accounts={accounts}
           readOnly={isArchived}
@@ -417,7 +409,7 @@ async function WorkDetailContent({ id }: { id: string }) {
         clientName={client?.name || ""}
         assignedToClient={(assignedToClient || []) as never}
         workStatusMap={workStatusMap}
-        userRole={membership.role as "master" | "manager" | "creator"}
+        userRole={membership.role}
         userId={membership.user_id}
         accounts={accounts}
         readOnly={isArchived}

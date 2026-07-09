@@ -3,8 +3,9 @@
 import { cache } from 'react'
 import { createClient } from './supabase-server'
 import { redirect } from 'next/navigation'
+import type { Role } from './roles'
+export type { Role } from './roles'
 
-export type Role = 'master' | 'manager' | 'creator'
 export type MembershipStatus = 'pending' | 'active' | 'rejected'
 
 export interface ActiveMembership {

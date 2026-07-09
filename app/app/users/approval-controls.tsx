@@ -36,7 +36,7 @@ interface ApprovalControlsProps {
 
 export function ApprovalControls({ membershipId, userRole, connections }: ApprovalControlsProps) {
   const router = useRouter()
-  const [role, setRole] = useState<'manager' | 'creator'>('creator')
+  const [role, setRole] = useState<'manager' | 'head_designer' | 'creator'>('creator')
   const [busy, setBusy] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -120,7 +120,7 @@ export function ApprovalControls({ membershipId, userRole, connections }: Approv
       <div className="flex gap-2 items-center">
         <Select
           value={role}
-          onValueChange={(v) => setRole(v as 'manager' | 'creator')}
+          onValueChange={(v) => setRole(v as 'manager' | 'head_designer' | 'creator')}
           disabled={busy || isPending}
         >
           <SelectTrigger className="w-28 h-8 text-xs bg-neutral-900 border-neutral-700">
@@ -134,6 +134,7 @@ export function ApprovalControls({ membershipId, userRole, connections }: Approv
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="creator">Creator</SelectItem>
+            <SelectItem value="head_designer">Head Designer</SelectItem>
             <SelectItem value="manager">Manager</SelectItem>
           </SelectContent>
         </Select>

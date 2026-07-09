@@ -21,6 +21,8 @@ import { Badge } from '@/components/ui/badge'
 import { Undo2 } from 'lucide-react'
 import type { WorkStatus } from '@/lib/work-helpers'
 import { PaginationButtons, paginate } from '@/components/ui/pagination-buttons'
+import type { Role } from '@/lib/roles'
+import { isManagerLikeRole } from '@/lib/roles'
 
 // Per spec: 60-second window for unassign-undo / mark-useful-undo.
 // Kept in sync with the same threshold on the unassign + waste API routes.
@@ -50,7 +52,7 @@ interface Props {
   assignedToClient: Generation[]
   /** Map of work_id → status. Used to flag the "Rework" tag per row. */
   workStatusMap: Record<string, WorkStatus>
-  userRole: 'master' | 'manager' | 'creator'
+  userRole: Role
   userId: string
   accounts: { id: string; label: string }[]
   readOnly?: boolean
@@ -89,21 +91,26 @@ export function MediaPreview({
   url,
   mediaType,
   name,
+  className,
 }: {
   url: string
   mediaType: string
   name: string
+  className?: string
 }) {
   const [failed, setFailed] = useState(false)
   const looksAudio = /\b(text\s*to\s*speech|tts|voiceover|seed\s*audio|audio|speech|voice)\b/i.test(
     name
   )
+  const frameClassName =
+    className ??
+    'w-32 h-22 2xl:w-40 2xl:h-28'
 
   // Feature charges (voiceover, voice change, etc.) have no media URL.
   if (mediaType === 'feature' || !url) {
     return (
       <div
-        className="w-32 h-22 2xl:w-40 2xl:h-28 rounded bg-neutral-800 border border-neutral-700 flex items-center justify-center text-[9px] text-neutral-500 uppercase tracking-wide"
+        className={`${frameClassName} flex items-center justify-center overflow-hidden rounded bg-neutral-800 border border-neutral-700 text-[9px] text-neutral-500 uppercase tracking-wide`}
         title={name}
       >
         feat
@@ -113,7 +120,7 @@ export function MediaPreview({
   if (mediaType === 'audio' || (failed && looksAudio)) {
     return (
       <div
-        className="w-32 h-22 2xl:w-40 2xl:h-28 rounded bg-neutral-900 border border-neutral-700 flex items-center justify-center text-[9px] text-sky-300 uppercase tracking-[0.2em]"
+        className={`${frameClassName} flex items-center justify-center overflow-hidden rounded bg-neutral-900 border border-neutral-700 text-[9px] text-sky-300 uppercase tracking-[0.2em]`}
         title={name}
       >
         audio
@@ -123,7 +130,7 @@ export function MediaPreview({
   if (failed) {
     return (
       <div
-        className="w-32 h-22 2xl:w-40 2xl:h-28 rounded bg-neutral-800 flex items-center justify-center text-[10px] text-neutral-600"
+        className={`${frameClassName} flex items-center justify-center overflow-hidden rounded bg-neutral-800 text-[10px] text-neutral-600`}
         title={name}
       >
         —
@@ -132,32 +139,36 @@ export function MediaPreview({
   }
   if (mediaType === 'video') {
     return (
-      <video
-        src={url}
-        className="w-32 h-22 2xl:w-40 2xl:h-28 rounded object-cover bg-black"
-        preload="metadata"
-        muted
-        onError={() => setFailed(true)}
-        onMouseEnter={(e) => {
-          void (e.currentTarget as HTMLVideoElement).play()
-        }}
-        onMouseLeave={(e) => {
-          const v = e.currentTarget as HTMLVideoElement
-          v.pause()
-          v.currentTime = 0
-        }}
-      />
+      <div className={`${frameClassName} overflow-hidden rounded-[inherit] bg-black`}>
+        <video
+          src={url}
+          className="h-full w-full rounded-[inherit] object-cover bg-black"
+          preload="metadata"
+          muted
+          onError={() => setFailed(true)}
+          onMouseEnter={(e) => {
+            void (e.currentTarget as HTMLVideoElement).play()
+          }}
+          onMouseLeave={(e) => {
+            const v = e.currentTarget as HTMLVideoElement
+            v.pause()
+            v.currentTime = 0
+          }}
+        />
+      </div>
     )
   }
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={url}
-      alt={name}
-      className="w-32 h-22 2xl:w-40 2xl:h-28 rounded object-cover bg-neutral-800"
-      loading="lazy"
-      onError={() => setFailed(true)}
-    />
+    <div className={`${frameClassName} overflow-hidden rounded-[inherit] bg-neutral-800`}>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={url}
+        alt={name}
+        className="h-full w-full rounded-[inherit] object-cover bg-neutral-800"
+        loading="lazy"
+        onError={() => setFailed(true)}
+      />
+    </div>
   )
 }
 
@@ -193,7 +204,7 @@ export function UnassignButton({
   const [isPending, startTransition] = useTransition()
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
 
-  const isMasterOrManager = userRole === 'master' || userRole === 'manager'
+  const isMasterOrManager = userRole === 'master' || isManagerLikeRole(userRole)
   const isAssigner = assignedBy === userId
 
   useEffect(() => {
@@ -285,7 +296,7 @@ export function WastageButton({
   const [isPending, startTransition] = useTransition()
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
 
-  const isMasterOrManager = userRole === 'master' || userRole === 'manager'
+  const isMasterOrManager = userRole === 'master' || isManagerLikeRole(userRole)
   const isWaster = wastedBy === userId
   const isWasted = wastedAt !== null
 
@@ -703,17 +714,17 @@ export function AssignTables({
         </div>
       </div>
 
-      {/* IRRELEVANT */}
+      {/* R&D */}
       {allIrrelevant.length > 0 && (
         <div className="bg-neutral-950 border border-neutral-700/30 rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-neutral-800">
             <h2 className="font-semibold text-neutral-500 text-sm flex items-center gap-2">
-              Irrelevant
+              R&amp;D
               <Badge variant="outline" className="text-neutral-600 border-neutral-700">
                 {allIrrelevant.length}
               </Badge>
             </h2>
-            <p className="text-xs text-neutral-600 mt-0.5">Practice / past work — not counted in credits</p>
+            <p className="text-xs text-neutral-600 mt-0.5">R&amp;D / practice / past work for this workstream — not counted in credits</p>
           </div>
           <div className="overflow-auto max-h-44">
             <table className="w-full text-xs">
