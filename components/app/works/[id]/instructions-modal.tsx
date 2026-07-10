@@ -1,21 +1,18 @@
-'use client'
-
-// app/app/works/[id]/instructions-modal.tsx
-// Clickable file card that opens a modal with the .md / .txt contents.
-import { useState } from 'react'
-import { FileText, FileCode2, X } from 'lucide-react'
+"use client";
+import { useState } from "react";
+import { FileText, FileCode2, X } from "lucide-react";
 
 interface Props {
-  filename: string
-  ext: string
-  content: string
+  filename: string;
+  ext: string;
+  content: string;
 }
 
 export function InstructionsModal({ filename, ext, content }: Props) {
-  const [open, setOpen] = useState(false)
-  const Icon = ext === 'md' ? FileCode2 : FileText
+  const [open, setOpen] = useState(false);
+  const Icon = ext === "md" ? FileCode2 : FileText;
 
-  const sizeKb = (new Blob([content]).size / 1024).toFixed(1)
+  const sizeKb = (new Blob([content]).size / 1024).toFixed(1);
 
   return (
     <>
@@ -51,8 +48,12 @@ export function InstructionsModal({ filename, ext, content }: Props) {
             <div className="flex items-center justify-between px-4 py-3 border-b border-neutral-800">
               <div className="flex items-center gap-2">
                 <Icon className="size-4 text-lime-400" />
-                <span className="text-sm font-medium text-white">{filename}</span>
-                <span className="text-xs text-neutral-500">· {ext.toUpperCase()} · {sizeKb} KB</span>
+                <span className="text-sm font-medium text-white">
+                  {filename}
+                </span>
+                <span className="text-xs text-neutral-500">
+                  · {ext.toUpperCase()} · {sizeKb} KB
+                </span>
               </div>
               <button
                 type="button"
@@ -69,5 +70,5 @@ export function InstructionsModal({ filename, ext, content }: Props) {
         </div>
       )}
     </>
-  )
+  );
 }

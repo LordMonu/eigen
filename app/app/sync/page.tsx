@@ -22,9 +22,9 @@ import {
   MediaPreview,
   UnassignButton,
   WastageButton,
-} from "@/app/app/works/[id]/assign-tables";
-import { ClientFormDialog } from "@/app/app/clients/client-form-dialog";
-import { CreateWorkDialog } from "@/app/app/works/create-work-dialog";
+} from "@/components/app/works/[id]/assign-tables";
+import { ClientFormDialog } from "@/components/app/clients/client-form-dialog";
+import { CreateWorkDialog } from "@/components/app/works/create-work-dialog";
 import { PaginationButtons } from "@/components/ui/pagination-buttons";
 import {
   fetchSyncStats,
@@ -966,7 +966,7 @@ export default function SyncPage() {
 
       {selectedUnassignedIds.size > 0 && (
         <div className="fixed inset-x-0 bottom-5 z-[70] flex justify-center px-3 sm:px-4 pointer-events-none">
-          <div className="pointer-events-auto w-auto max-w-[calc(100vw-1.5rem)] rounded-2xl border border-neutral-800 bg-neutral-950/96 px-3 py-3 shadow-[0_16px_60px_rgba(0,0,0,0.5)] backdrop-blur-xl sm:max-w-[calc(100vw-3rem)] sm:px-4">
+          <div className="pointer-events-auto w-auto max-w-[calc(100vw-1.5rem)] rounded-2xl border border-neutral-800 bg-neutral-550 px-3 py-3 shadow-[0_16px_60px_rgba(0,0,0,0.5)] backdrop-blur-lg sm:max-w-[calc(100vw-3rem)] sm:px-4">
             <div className="flex flex-col items-center gap-3 xl:flex-row xl:items-center xl:justify-center xl:gap-4">
               <div className="text-sm font-medium text-white text-center whitespace-nowrap">
                 {selectedUnassignedIds.size} preview

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { CreateWorkDialog } from '@/app/app/works/create-work-dialog'
+import { CreateWorkDialog } from '@/components/app/works/create-work-dialog'
 
 interface Props {
   clientId: string

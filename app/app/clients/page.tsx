@@ -1,6 +1,3 @@
-// app/app/clients/page.tsx — clients list, filterable by status, fixed-order grid.
-// Uses clients_with_credit_totals() RPC: 1 round-trip instead of pulling every
-// generation row in the org just to sum per-client credits client-side.
 import { requireActiveMembership } from "@/lib/auth-helpers";
 import { createClient } from "@/lib/supabase-server";
 import { can } from "@/lib/rbac";
@@ -10,9 +7,9 @@ import {
   sortClientsByStatus,
   type ClientStatus,
 } from "@/lib/client-helpers";
-import { ClientCard } from "./client-card";
-import { ClientsHeader } from "./clients-header";
-import { SetupRdButton } from "./setup-rd-button";
+import { ClientCard } from "@/components/app/clients/client-card";
+import { ClientsHeader } from "@/components/app/clients/clients-header";
+import { SetupRdButton } from "@/components/app/clients/setup-rd-button";
 
 interface PageProps {
   searchParams: Promise<{ status?: string }>;
@@ -32,8 +29,6 @@ export default async function ClientsPage({ searchParams }: PageProps) {
   const supabase = await createClient();
   const { status: filterStatus } = await searchParams;
 
-  // SINGLE WAVE — auth + RPC in parallel. RLS validates the JWT from
-  // cookies independently, so the RPC returns correct results while auth resolves.
   const [membership, { data: rows, error }, { data: rdClient }] =
     await Promise.all([
       requireActiveMembership(),

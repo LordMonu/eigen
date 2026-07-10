@@ -1,45 +1,40 @@
-'use client'
-
-// Per-client Works section filter. Drives the `?wstatus=` URL param so the
-// server component can re-render the works list filtered by status. Keeps
-// the rest of the page's query (range, etc.) intact.
-
-import { useTransition } from 'react'
-import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+"use client";
+import { useTransition } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select'
+} from "@/components/ui/select";
 import {
   WORK_STATUSES,
   WORK_STATUS_LABELS,
   type WorkStatus,
-} from '@/lib/work-helpers'
+} from "@/lib/work-helpers";
 
 interface Props {
-  current: WorkStatus | 'all'
+  current: WorkStatus | "all";
 }
 
 export function WorkStatusFilter({ current }: Props) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const params = useSearchParams()
-  const [isPending, startTransition] = useTransition()
+  const router = useRouter();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const [isPending, startTransition] = useTransition();
 
   function handleChange(value: string) {
-    const next = new URLSearchParams(params.toString())
-    if (value === 'all') {
-      next.delete('wstatus')
+    const next = new URLSearchParams(params.toString());
+    if (value === "all") {
+      next.delete("wstatus");
     } else {
-      next.set('wstatus', value)
+      next.set("wstatus", value);
     }
-    const qs = next.toString()
+    const qs = next.toString();
     startTransition(() => {
-      router.push(qs ? `${pathname}?${qs}` : pathname)
-    })
+      router.push(qs ? `${pathname}?${qs}` : pathname);
+    });
   }
 
   return (
@@ -55,9 +50,9 @@ export function WorkStatusFilter({ current }: Props) {
         <SelectTrigger className="w-36 h-7 text-xs bg-neutral-900 border-neutral-700">
           <SelectValue>
             {(v) => {
-              const val = v as WorkStatus | 'all' | null
-              if (!val || val === 'all') return 'All works'
-              return WORK_STATUS_LABELS[val]
+              const val = v as WorkStatus | "all" | null;
+              if (!val || val === "all") return "All works";
+              return WORK_STATUS_LABELS[val];
             }}
           </SelectValue>
         </SelectTrigger>
@@ -73,5 +68,5 @@ export function WorkStatusFilter({ current }: Props) {
         </SelectContent>
       </Select>
     </div>
-  )
+  );
 }

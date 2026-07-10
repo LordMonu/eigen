@@ -1,17 +1,12 @@
-'use client'
-
-// app/app/works/[id]/instructions-button.tsx
-// Compact icon button rendered in the work-detail header (next to status
-// transitions / Edit / Delete). Click → modal showing both the uploaded
-// .md/.txt file content (if any) AND the inline notes (if any).
-import { useState } from 'react'
-import { FileText, FileCode2, X, StickyNote } from 'lucide-react'
+"use client";
+import { useState } from "react";
+import { FileText, FileCode2, X, StickyNote } from "lucide-react";
 
 interface Props {
-  filename: string | null
-  fileExt: string | null
-  fileContent: string | null
-  notes: string | null
+  filename: string | null;
+  fileExt: string | null;
+  fileContent: string | null;
+  notes: string | null;
 }
 
 export function InstructionsButton({
@@ -20,22 +15,22 @@ export function InstructionsButton({
   fileContent,
   notes,
 }: Props) {
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(false);
 
   // "hasFile" means a file is registered for this work. The content may
   // still be null if the server couldn't download it — the modal will say
   // "couldn't load" in that case.
-  const hasFile = !!filename
-  const hasNotes = !!(notes && notes.trim())
-  if (!hasFile && !hasNotes) return null
+  const hasFile = !!filename;
+  const hasNotes = !!(notes && notes.trim());
+  if (!hasFile && !hasNotes) return null;
 
-  const FileIcon = fileExt === 'md' ? FileCode2 : FileText
+  const FileIcon = fileExt === "md" ? FileCode2 : FileText;
   const fileSizeKb = hasFile
     ? (new Blob([fileContent!]).size / 1024).toFixed(1)
-    : null
+    : null;
 
   // Pick the trigger icon: file icon if a file exists, otherwise notes icon.
-  const TriggerIcon = hasFile ? FileIcon : StickyNote
+  const TriggerIcon = hasFile ? FileIcon : StickyNote;
 
   return (
     <>
@@ -44,10 +39,10 @@ export function InstructionsButton({
         onClick={() => setOpen(true)}
         title={
           hasFile && hasNotes
-            ? 'Instructions: file + notes'
+            ? "Instructions: file + notes"
             : hasFile
-              ? `Instructions: ${filename || 'file'}`
-              : 'Instructions: notes'
+              ? `Instructions: ${filename || "file"}`
+              : "Instructions: notes"
         }
         className="relative inline-flex items-center justify-center size-8 rounded-md border border-neutral-700 bg-neutral-900 text-lime-400 hover:bg-neutral-800 hover:border-lime-700 transition-colors"
       >
@@ -95,7 +90,7 @@ export function InstructionsButton({
                     </span>
                     {fileContent && (
                       <span className="text-neutral-500">
-                        · {(fileExt || 'txt').toUpperCase()} · {fileSizeKb} KB
+                        · {(fileExt || "txt").toUpperCase()} · {fileSizeKb} KB
                       </span>
                     )}
                   </div>
@@ -127,5 +122,5 @@ export function InstructionsButton({
         </div>
       )}
     </>
-  )
+  );
 }

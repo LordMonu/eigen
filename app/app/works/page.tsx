@@ -1,11 +1,7 @@
-// app/app/works/page.tsx — works list with status tabs + calendar/card toggle.
-// Tabs filter client-side (instant). Uses works_with_credit_totals() RPC to
-// aggregate credits server-side instead of pulling every generations row.
-
 import { Suspense } from "react";
 import { requireActiveMembership } from "@/lib/auth-helpers";
 import { createClient } from "@/lib/supabase-server";
-import { WorksView } from "./works-view";
+import { WorksView } from "@/components/app/works/works-view";
 import { can } from "@/lib/rbac";
 
 const WORK_ALLOWED_CLIENT_STATUSES = ["trial", "ongoing", "in_talk"];
@@ -52,7 +48,11 @@ interface WorkRpcRow {
   deleted_at: string | null;
 }
 
-async function WorksContent({ initialFilterStatus }: { initialFilterStatus?: string }) {
+async function WorksContent({
+  initialFilterStatus,
+}: {
+  initialFilterStatus?: string;
+}) {
   const supabase = await createClient();
 
   // SINGLE WAVE — auth + all data queries fire in parallel.
@@ -67,7 +67,11 @@ async function WorksContent({ initialFilterStatus }: { initialFilterStatus?: str
   ] = await Promise.all([
     requireActiveMembership(),
     supabase.rpc("works_with_credit_totals"),
-    supabase.from("clients").select("id, name, status").is("deleted_at", null).order("name"),
+    supabase
+      .from("clients")
+      .select("id, name, status")
+      .is("deleted_at", null)
+      .order("name"),
     supabase
       .from("work_creators")
       .select("work_id, user_id, added_at")
@@ -76,7 +80,10 @@ async function WorksContent({ initialFilterStatus }: { initialFilterStatus?: str
   ]);
 
   if (worksError) {
-    console.error("[works] works_with_credit_totals RPC failed:", worksError.message);
+    console.error(
+      "[works] works_with_credit_totals RPC failed:",
+      worksError.message,
+    );
   }
 
   const works = (worksRaw || []) as WorkRpcRow[];

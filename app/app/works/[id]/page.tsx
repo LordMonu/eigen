@@ -1,7 +1,3 @@
-// app/app/works/[id]/page.tsx — work detail.
-// Back link renders instantly; content streams via Suspense.
-// Uses work_credit_total + work_creator_breakdown RPCs to skip the
-// "pull every generation row to compute SUM/breakdown in JS" pattern.
 import { Suspense } from "react";
 import { requireActiveMembership } from "@/lib/auth-helpers";
 import { createClient } from "@/lib/supabase-server";
@@ -16,12 +12,12 @@ import {
   allowedTransitions,
 } from "@/lib/work-helpers";
 import { can } from "@/lib/rbac";
-import { StatusActionButtons } from "./status-action-buttons";
-import { AssignTables } from "./assign-tables";
-import { SyncAndAssign } from "./sync-and-assign";
-import { InstructionsButton } from "./instructions-button";
-import { ScheduleCalendar } from "./schedule-calendar";
-import { WorkActions } from "./work-actions";
+import { StatusActionButtons } from "@/components/app/works/[id]/status-action-buttons";
+import { AssignTables } from "@/components/app/works/[id]/assign-tables";
+import { SyncAndAssign } from "@/components/app/works/[id]/sync-and-assign";
+import { InstructionsButton } from "@/components/app/works/[id]/instructions-button";
+import { ScheduleCalendar } from "@/components/app/works/[id]/schedule-calendar";
+import { WorkActions } from "@/components/app/works/[id]/work-actions";
 import { ActivityLog } from "@/components/ui/activity-log";
 
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
@@ -150,16 +146,20 @@ async function WorkDetailContent({ id }: { id: string }) {
     (clientWorks || []).map((w) => [w.id, w.status as WorkStatus]),
   );
 
-  const accounts = ((hfConns as { id: string; label: string }[]) || []).map((c) => ({ id: c.id, label: c.label }));
+  const accounts = ((hfConns as { id: string; label: string }[]) || []).map(
+    (c) => ({ id: c.id, label: c.label }),
+  );
 
   // creatorStats comes directly from the RPC — no JS reduce loop.
   const creatorStats = (
-    (creatorBreakdown as {
-      assigned_by: string;
-      actual_credits: string | number;
-      wastage_credits: string | number;
-      rework_credits: string | number;
-    }[] | null) || []
+    (creatorBreakdown as
+      | {
+          assigned_by: string;
+          actual_credits: string | number;
+          wastage_credits: string | number;
+          rework_credits: string | number;
+        }[]
+      | null) || []
   ).map((row) => ({
     userId: row.assigned_by,
     name: nameMap.get(row.assigned_by) || "Unknown",
@@ -205,9 +205,20 @@ async function WorkDetailContent({ id }: { id: string }) {
             Archived
           </span>
           <span className="text-sm text-neutral-400">
-            {isClientArchived && !work.deleted_at
-              ? <>This work is read-only because client <Link href={`/app/clients/${work.client_id}`} className="text-neutral-300 underline underline-offset-2">{client?.name}</Link> has been archived.</>
-              : "This work has been archived. All data is read-only."}
+            {isClientArchived && !work.deleted_at ? (
+              <>
+                This work is read-only because client{" "}
+                <Link
+                  href={`/app/clients/${work.client_id}`}
+                  className="text-neutral-300 underline underline-offset-2"
+                >
+                  {client?.name}
+                </Link>{" "}
+                has been archived.
+              </>
+            ) : (
+              "This work has been archived. All data is read-only."
+            )}
           </span>
         </div>
       )}
@@ -224,8 +235,8 @@ async function WorkDetailContent({ id }: { id: string }) {
             >
               {client?.name}
             </Link>{" "}
-            is <span className="font-medium">{client?.status}</span>. Change
-            the client status back to an active state to unlock editing.
+            is <span className="font-medium">{client?.status}</span>. Change the
+            client status back to an active state to unlock editing.
           </p>
         </div>
       )}
@@ -273,21 +284,25 @@ async function WorkDetailContent({ id }: { id: string }) {
             fileContent={instructionsFileContent}
             notes={work.notes}
           />
-          {!isArchived && (() => {
-            if (clientLocked) {
-              return (
+          {!isArchived &&
+            (() => {
+              if (clientLocked) {
+                return (
+                  <StatusActionButtons
+                    workId={work.id}
+                    transitions={[]}
+                    locked
+                    clientStatus={client?.status as "paused" | "ended"}
+                  />
+                );
+              }
+              return transitions.length > 0 ? (
                 <StatusActionButtons
                   workId={work.id}
-                  transitions={[]}
-                  locked
-                  clientStatus={client?.status as "paused" | "ended"}
+                  transitions={transitions}
                 />
-              );
-            }
-            return transitions.length > 0 ? (
-              <StatusActionButtons workId={work.id} transitions={transitions} />
-            ) : null;
-          })()}
+              ) : null;
+            })()}
           <WorkActions
             work={{
               id: work.id,
@@ -420,7 +435,18 @@ async function WorkDetailContent({ id }: { id: string }) {
         <div className="px-4 py-3 border-b border-neutral-800">
           <h2 className="font-semibold text-white text-sm">Activity</h2>
         </div>
-        <ActivityLog entries={(activityLogEntries || []) as { id: string; action: string; from_value: string | null; to_value: string | null; actor_name: string; created_at: string }[]} />
+        <ActivityLog
+          entries={
+            (activityLogEntries || []) as {
+              id: string;
+              action: string;
+              from_value: string | null;
+              to_value: string | null;
+              actor_name: string;
+              created_at: string;
+            }[]
+          }
+        />
       </section>
     </>
   );

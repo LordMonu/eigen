@@ -2,9 +2,6 @@
 
 import type { DateRange } from "react-day-picker";
 import { Calendar } from "@/components/ui/calendar";
-
-// Parse a Postgres DATE (YYYY-MM-DD) into a local-time Date, NOT UTC midnight,
-// so the highlighted day matches what's stored regardless of the user's timezone.
 function parseLocalDate(s: string | null): Date | undefined {
   if (!s) return undefined;
   const [y, m, d] = s.split("-").map(Number);

@@ -1,8 +1,3 @@
-// app/app/clients/[id]/page.tsx — client detail.
-// Back link renders instantly; content streams via Suspense.
-// Uses client_credit_summary + client_works_with_credit_totals +
-// client_work_user_breakdown RPCs to skip pulling every generations row
-// just to aggregate credits client-side.
 import { Suspense } from "react";
 import { requireActiveMembership } from "@/lib/auth-helpers";
 import { createClient } from "@/lib/supabase-server";
@@ -20,18 +15,21 @@ import {
   WORK_STATUS_LABELS,
   type WorkStatus,
 } from "@/lib/work-helpers";
-import { StatusDropdown } from "./status-dropdown";
-import { WorkStatusFilter } from "./work-status-filter";
-import { EditClientButton } from "./edit-client-button";
-import { DeleteClientButton } from "./delete-client-button";
-import { CreateWorkButton } from "./create-work-button";
-import { ClientGenerationsTables } from "./client-generations-tables";
-import { ClientTimeFilter, type ClientRange } from "./client-time-filter";
+import { StatusDropdown } from "@/components/app/clients/[id]/status-dropdown";
+import { WorkStatusFilter } from "@/components/app/clients/[id]/work-status-filter";
+import { EditClientButton } from "@/components/app/clients/[id]/edit-client-button";
+import { DeleteClientButton } from "@/components/app/clients/[id]/delete-client-button";
+import { CreateWorkButton } from "@/components/app/clients/[id]/create-work-button";
+import { ClientGenerationsTables } from "@/components/app/clients/[id]/client-generations-tables";
+import {
+  ClientTimeFilter,
+  type ClientRange,
+} from "@/components/app/clients/[id]/client-time-filter";
 import {
   WorkUserReport,
   type WorkReportRow,
   type WorkUserStat,
-} from "./work-user-report";
+} from "@/components/app/clients/[id]/work-user-report";
 import { ActivityLog } from "@/components/ui/activity-log";
 
 const WORK_ALLOWED_STATUSES: ClientStatus[] = ["trial", "ongoing", "in_talk"];
@@ -269,7 +267,9 @@ async function ClientDetailContent({
     (allMembers || []).map((u) => [u.user_id, u.full_name]),
   );
 
-  const accounts = ((hfConns as { id: string; label: string }[]) || []).map((c) => ({ id: c.id, label: c.label }));
+  const accounts = ((hfConns as { id: string; label: string }[]) || []).map(
+    (c) => ({ id: c.id, label: c.label }),
+  );
 
   // Build the WorkUserReport rows.
   const reportRows: WorkReportRow[] = worksFromRpc.map((w) => {
@@ -338,7 +338,11 @@ async function ClientDetailContent({
         </div>
       )}
       <div className="flex items-start justify-between gap-4 mb-2">
-        <h1 className={`text-3xl font-bold ${isArchived ? 'text-neutral-500' : 'text-white'}`}>{client.name}</h1>
+        <h1
+          className={`text-3xl font-bold ${isArchived ? "text-neutral-500" : "text-white"}`}
+        >
+          {client.name}
+        </h1>
         <div className="flex items-center gap-2">
           {canEdit ? (
             <StatusDropdown clientId={client.id} currentStatus={status} />
@@ -425,10 +429,7 @@ async function ClientDetailContent({
           <div className="flex items-center gap-2">
             <WorkStatusFilter current={workStatusFilter} />
             {showCreateWork && (
-              <CreateWorkButton
-                clientId={client.id}
-                clientName={client.name}
-              />
+              <CreateWorkButton clientId={client.id} clientName={client.name} />
             )}
           </div>
         </div>
@@ -446,8 +447,7 @@ async function ClientDetailContent({
                 <span className="text-neutral-300">
                   {CLIENT_STATUS_LABELS[status]}
                 </span>{" "}
-                — works can only be added on Trial / Ongoing / In Talks
-                clients.
+                — works can only be added on Trial / Ongoing / In Talks clients.
               </p>
             )}
           </div>
@@ -461,8 +461,9 @@ async function ClientDetailContent({
               .
             </p>
             <p className="text-sm mt-1">
-              {worksFromRpc.length} other work{worksFromRpc.length === 1 ? "" : "s"} on
-              this client — clear the filter to see them.
+              {worksFromRpc.length} other work
+              {worksFromRpc.length === 1 ? "" : "s"} on this client — clear the
+              filter to see them.
             </p>
           </div>
         ) : (
@@ -488,7 +489,9 @@ async function ClientDetailContent({
                     <div className="text-xs text-neutral-500">
                       {w.video_type && <span>{w.video_type} · </span>}
                       {(() => {
-                        const ids = creatorIdsByWork.get(w.id) || [w.creator_id];
+                        const ids = creatorIdsByWork.get(w.id) || [
+                          w.creator_id,
+                        ];
                         const names = ids.map(
                           (uid) => userNameMap.get(uid) || "Unknown",
                         );
@@ -566,7 +569,11 @@ async function ClientDetailContent({
             Archiving this client also archives all its works. All assigned
             credits and generations will remain allocated.
           </p>
-          <DeleteClientButton clientId={client.id} clientName={client.name} isDefault={!!(client as { is_default?: boolean }).is_default} />
+          <DeleteClientButton
+            clientId={client.id}
+            clientName={client.name}
+            isDefault={!!(client as { is_default?: boolean }).is_default}
+          />
         </section>
       )}
 
@@ -575,7 +582,18 @@ async function ClientDetailContent({
         <div className="px-4 py-3 border-b border-neutral-800">
           <h2 className="font-semibold text-white text-sm">Activity</h2>
         </div>
-        <ActivityLog entries={(activityLogEntries || []) as { id: string; action: string; from_value: string | null; to_value: string | null; actor_name: string; created_at: string }[]} />
+        <ActivityLog
+          entries={
+            (activityLogEntries || []) as {
+              id: string;
+              action: string;
+              from_value: string | null;
+              to_value: string | null;
+              actor_name: string;
+              created_at: string;
+            }[]
+          }
+        />
       </section>
     </>
   );

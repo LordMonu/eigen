@@ -1,34 +1,28 @@
-// app/app/clients/[id]/work-user-report.tsx
-// Server-rendered: for each work on the client, a compact "credit breakdown
-// by user" table — User / Actual / Wastage / Rework. Only users who actually
-// contributed to that work appear. The work-level header shows the work's
-// title + status badge and links into the work-detail page.
-
-import Link from 'next/link'
+import Link from "next/link";
 import {
   WORK_STATUS_COLORS,
   WORK_STATUS_LABELS,
   type WorkStatus,
-} from '@/lib/work-helpers'
+} from "@/lib/work-helpers";
 
 export interface WorkUserStat {
-  userId: string
-  name: string
-  actual: number
-  wastage: number
-  rework: number
+  userId: string;
+  name: string;
+  actual: number;
+  wastage: number;
+  rework: number;
 }
 
 export interface WorkReportRow {
-  workId: string
-  title: string
-  status: WorkStatus
-  stats: WorkUserStat[]
+  workId: string;
+  title: string;
+  status: WorkStatus;
+  stats: WorkUserStat[];
 }
 
 interface Props {
-  rows: WorkReportRow[]
-  rangeLabel: string
+  rows: WorkReportRow[];
+  rangeLabel: string;
 }
 
 export function WorkUserReport({ rows, rangeLabel }: Props) {
@@ -36,7 +30,9 @@ export function WorkUserReport({ rows, rangeLabel }: Props) {
     <section className="bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden mb-6">
       <div className="px-4 py-3 border-b border-neutral-800 flex items-center justify-between gap-3">
         <div>
-          <h2 className="font-semibold text-white">Credit breakdown by work &amp; user</h2>
+          <h2 className="font-semibold text-white">
+            Credit breakdown by work &amp; user
+          </h2>
           <p className="text-xs text-neutral-500 mt-0.5">
             Per-work, per-user credits. Only users who contributed to the work
             appear. Scope: {rangeLabel}.
@@ -51,9 +47,9 @@ export function WorkUserReport({ rows, rangeLabel }: Props) {
       ) : (
         <div className="divide-y divide-neutral-800">
           {rows.map((row) => {
-            const totalActual = row.stats.reduce((s, u) => s + u.actual, 0)
-            const totalWaste = row.stats.reduce((s, u) => s + u.wastage, 0)
-            const totalRework = row.stats.reduce((s, u) => s + u.rework, 0)
+            const totalActual = row.stats.reduce((s, u) => s + u.actual, 0);
+            const totalWaste = row.stats.reduce((s, u) => s + u.wastage, 0);
+            const totalRework = row.stats.reduce((s, u) => s + u.rework, 0);
             return (
               <div key={row.workId} className="px-4 py-3">
                 <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
@@ -91,13 +87,13 @@ export function WorkUserReport({ rows, rangeLabel }: Props) {
                           {u.name}
                         </div>
                         <div className="text-right font-mono text-lime-300">
-                          {u.actual > 0 ? u.actual.toFixed(1) : '—'}
+                          {u.actual > 0 ? u.actual.toFixed(1) : "—"}
                         </div>
                         <div className="text-right font-mono text-yellow-300">
-                          {u.wastage > 0 ? u.wastage.toFixed(1) : '—'}
+                          {u.wastage > 0 ? u.wastage.toFixed(1) : "—"}
                         </div>
                         <div className="text-right font-mono text-orange-300">
-                          {u.rework > 0 ? u.rework.toFixed(1) : '—'}
+                          {u.rework > 0 ? u.rework.toFixed(1) : "—"}
                         </div>
                       </div>
                     ))}
@@ -106,22 +102,22 @@ export function WorkUserReport({ rows, rangeLabel }: Props) {
                         Total
                       </div>
                       <div className="text-right font-mono text-lime-400 font-semibold">
-                        {totalActual > 0 ? totalActual.toFixed(1) : '—'}
+                        {totalActual > 0 ? totalActual.toFixed(1) : "—"}
                       </div>
                       <div className="text-right font-mono text-yellow-400 font-semibold">
-                        {totalWaste > 0 ? totalWaste.toFixed(1) : '—'}
+                        {totalWaste > 0 ? totalWaste.toFixed(1) : "—"}
                       </div>
                       <div className="text-right font-mono text-orange-400 font-semibold">
-                        {totalRework > 0 ? totalRework.toFixed(1) : '—'}
+                        {totalRework > 0 ? totalRework.toFixed(1) : "—"}
                       </div>
                     </div>
                   </div>
                 )}
               </div>
-            )
+            );
           })}
         </div>
       )}
     </section>
-  )
+  );
 }

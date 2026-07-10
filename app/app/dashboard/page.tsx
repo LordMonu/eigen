@@ -1,22 +1,19 @@
-// app/app/dashboard/page.tsx — role-aware command center.
-// Header renders instantly; KPIs + sections stream via Suspense.
-import { Suspense } from 'react'
-import { requireActiveMembership } from '@/lib/auth-helpers'
-import { createClient } from '@/lib/supabase-server'
-import { fetchAllRows } from '@/lib/fetch-all-rows'
-import { can } from '@/lib/rbac'
-import { type ClientStatus } from '@/lib/client-helpers'
+import { Suspense } from "react";
+import { requireActiveMembership } from "@/lib/auth-helpers";
+import { createClient } from "@/lib/supabase-server";
+import { fetchAllRows } from "@/lib/fetch-all-rows";
+import { type ClientStatus } from "@/lib/client-helpers";
 import {
   WORK_STATUS_COLORS,
   WORK_STATUS_LABELS,
   type WorkStatus,
   formatDeadline,
-} from '@/lib/work-helpers'
-import Link from 'next/link'
-import { ClientPipelineCard } from './client-pipeline-card'
+} from "@/lib/work-helpers";
+import Link from "next/link";
+import { ClientPipelineCard } from "./client-pipeline-card";
 
 export default async function DashboardPage() {
-  const membership = await requireActiveMembership()
+  const membership = await requireActiveMembership();
 
   return (
     <div className="p-6 space-y-6 text-neutral-100">
@@ -30,13 +27,13 @@ export default async function DashboardPage() {
         <DashboardContent />
       </Suspense>
     </div>
-  )
+  );
 }
 
 async function DashboardContent() {
-  const membership = await requireActiveMembership()
-  const supabase = await createClient()
-  const isCreator = membership.role === 'creator'
+  const membership = await requireActiveMembership();
+  const supabase = await createClient();
+  const isCreator = membership.role === "creator";
 
   const [
     genStatsResult,
@@ -45,77 +42,77 @@ async function DashboardContent() {
     { data: memberships },
     { data: myWorkRows },
   ] = await Promise.all([
-    supabase.rpc('dashboard_generation_stats').maybeSingle(),
-    supabase.from('clients').select('id, name, status'),
+    supabase.rpc("dashboard_generation_stats").maybeSingle(),
+    supabase.from("clients").select("id, name, status"),
     supabase
-      .from('works')
+      .from("works")
       .select(
-        'id, title, video_type, status, end_date, end_time, client_id, creator_id, max_credits',
+        "id, title, video_type, status, end_date, end_time, client_id, creator_id, max_credits",
       ),
     supabase
-      .from('memberships')
-      .select('user_id, full_name')
-      .eq('status', 'active'),
+      .from("memberships")
+      .select("user_id, full_name")
+      .eq("status", "active"),
     supabase
-      .from('work_creators')
-      .select('work_id')
-      .eq('user_id', membership.user_id),
-  ])
+      .from("work_creators")
+      .select("work_id")
+      .eq("user_id", membership.user_id),
+  ]);
   const genStats = genStatsResult.data as {
-    total_credits: number | string
-    unassigned_credits: number | string
-    generation_count: number | string
-  } | null
+    total_credits: number | string;
+    unassigned_credits: number | string;
+    generation_count: number | string;
+  } | null;
   const myWorkIdsFromJoin = new Set(
     (myWorkRows || []).map((r) => r.work_id as string),
-  )
+  );
 
-  let totalCredits = parseFloat(String(genStats?.total_credits ?? 0))
-  let unassignedCredits = parseFloat(String(genStats?.unassigned_credits ?? 0))
-  let generationCount = Number(genStats?.generation_count ?? 0)
+  let totalCredits = parseFloat(String(genStats?.total_credits ?? 0));
+  let unassignedCredits = parseFloat(String(genStats?.unassigned_credits ?? 0));
+  let generationCount = Number(genStats?.generation_count ?? 0);
 
   const myWorkIds = new Set<string>([
     ...(works || [])
       .filter((w) => w.creator_id === membership.user_id)
       .map((w) => w.id),
     ...Array.from(myWorkIdsFromJoin),
-  ])
-  const myWorkIdList = Array.from(myWorkIds)
-  let myCreditsUsed = 0
+  ]);
+  const myWorkIdList = Array.from(myWorkIds);
+  let myCreditsUsed = 0;
   if (myWorkIdList.length > 0) {
-    const { data: myCreditsUsedRaw } = await supabase.rpc('credits_for_works', {
+    const { data: myCreditsUsedRaw } = await supabase.rpc("credits_for_works", {
       p_work_ids: myWorkIdList,
-    })
-    myCreditsUsed = parseFloat(String(myCreditsUsedRaw ?? 0))
+    });
+    myCreditsUsed = parseFloat(String(myCreditsUsedRaw ?? 0));
   }
 
   // Fallback when dashboard RPCs are not deployed yet.
   if (!genStats) {
     const generations = await fetchAllRows((from, to) =>
       supabase
-        .from('generations')
-        .select('credits, client_id, work_id')
-        .order('id')
+        .from("generations")
+        .select("credits, client_id, work_id")
+        .order("id")
         .range(from, to),
-    )
+    );
     totalCredits = (generations || []).reduce(
-      (s, g) => s + parseFloat(g.credits || '0'),
+      (s, g) => s + parseFloat(g.credits || "0"),
       0,
-    )
+    );
     unassignedCredits = (generations || [])
       .filter((g) => !g.client_id)
-      .reduce((s, g) => s + parseFloat(g.credits || '0'), 0)
-    generationCount = generations?.length || 0
+      .reduce((s, g) => s + parseFloat(g.credits || "0"), 0);
+    generationCount = generations?.length || 0;
     if (myWorkIdList.length > 0) {
       myCreditsUsed = (generations || [])
         .filter((g) => g.work_id && myWorkIds.has(g.work_id))
-        .reduce((s, g) => s + parseFloat(g.credits || '0'), 0)
+        .reduce((s, g) => s + parseFloat(g.credits || "0"), 0);
     }
   }
 
-  const totalClients = clients?.length || 0
-  const totalWorks = works?.length || 0
-  const activeWorks = (works || []).filter((w) => w.status !== 'completed')
+  const totalClients = clients?.length || 0;
+  const totalWorks = works?.length || 0;
+  const activeWorks = (works || []).filter((w) => w.status !== "completed");
 
   const clientStatusCounts: Record<ClientStatus, number> = {
     ongoing: 0,
@@ -124,46 +121,44 @@ async function DashboardContent() {
     outreach: 0,
     paused: 0,
     ended: 0,
-  }
-  ;(clients || []).forEach((c) => {
-    clientStatusCounts[c.status as ClientStatus]++
-  })
+  };
+  (clients || []).forEach((c) => {
+    clientStatusCounts[c.status as ClientStatus]++;
+  });
 
-  const worksPerClient = new Map<string, number>()
-  ;(works || []).forEach((w) => {
-    worksPerClient.set(w.client_id, (worksPerClient.get(w.client_id) || 0) + 1)
-  })
+  const worksPerClient = new Map<string, number>();
+  (works || []).forEach((w) => {
+    worksPerClient.set(w.client_id, (worksPerClient.get(w.client_id) || 0) + 1);
+  });
   const worksPerClientRanked = Array.from(worksPerClient.entries())
     .map(([clientId, count]) => ({
       clientId,
-      clientName: clients?.find((c) => c.id === clientId)?.name || 'Unknown',
+      clientName: clients?.find((c) => c.id === clientId)?.name || "Unknown",
       count,
     }))
     .sort((a, b) => b.count - a.count)
-    .slice(0, 10)
+    .slice(0, 10);
 
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const twoWeeksFromNow = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000)
-  const todayStr = today.toISOString().split('T')[0]
-  const twoWeeksStr = twoWeeksFromNow.toISOString().split('T')[0]
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const twoWeeksFromNow = new Date(today.getTime() + 14 * 24 * 60 * 60 * 1000);
+  const todayStr = today.toISOString().split("T")[0];
+  const twoWeeksStr = twoWeeksFromNow.toISOString().split("T")[0];
 
   const nearDeadline = (works || [])
     .filter(
       (w) =>
-        w.status !== 'completed' &&
+        w.status !== "completed" &&
         w.end_date &&
         w.end_date >= todayStr &&
-        w.end_date <= twoWeeksStr
+        w.end_date <= twoWeeksStr,
     )
-    .sort((a, b) => (a.end_date || '').localeCompare(b.end_date || ''))
-    .slice(0, 10)
+    .sort((a, b) => (a.end_date || "").localeCompare(b.end_date || ""))
+    .slice(0, 10);
 
   const needsAttention = isCreator
-    ? (works || []).filter(
-        (w) => w.status === 'rework' && myWorkIds.has(w.id),
-      )
-    : (works || []).filter((w) => w.status === 'in_review')
+    ? (works || []).filter((w) => w.status === "rework" && myWorkIds.has(w.id))
+    : (works || []).filter((w) => w.status === "in_review");
 
   const myWorkStatusCounts: Record<WorkStatus, number> = {
     ongoing: 0,
@@ -171,20 +166,20 @@ async function DashboardContent() {
     rework: 0,
     paused: 0,
     completed: 0,
-  }
-  ;(works || []).forEach((w) => {
-    myWorkStatusCounts[w.status as WorkStatus]++
-  })
+  };
+  (works || []).forEach((w) => {
+    myWorkStatusCounts[w.status as WorkStatus]++;
+  });
 
   const memberNameMap = new Map(
-    (memberships || []).map((m) => [m.user_id, m.full_name])
-  )
-  const clientNameMap = new Map((clients || []).map((c) => [c.id, c.name]))
+    (memberships || []).map((m) => [m.user_id, m.full_name]),
+  );
+  const clientNameMap = new Map((clients || []).map((c) => [c.id, c.name]));
 
   function daysUntil(dateStr: string): number {
-    const d = new Date(dateStr)
-    d.setHours(0, 0, 0, 0)
-    return Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    const d = new Date(dateStr);
+    d.setHours(0, 0, 0, 0);
+    return Math.ceil((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
   }
 
   return (
@@ -264,18 +259,18 @@ async function DashboardContent() {
         <section
           className={`rounded-lg overflow-hidden border ${
             isCreator
-              ? 'bg-orange-950/30 border-orange-900'
-              : 'bg-purple-950/30 border-purple-900'
+              ? "bg-orange-950/30 border-orange-900"
+              : "bg-purple-950/30 border-purple-900"
           }`}
         >
           <div className="px-4 py-3 border-b border-neutral-800">
             <h2 className="font-semibold text-white">
-              {isCreator ? '⚠ Needs Your Revision' : '👀 Needs Your Approval'}
+              {isCreator ? "⚠ Needs Your Revision" : "👀 Needs Your Approval"}
             </h2>
             <p className="text-xs text-neutral-400 mt-0.5">
               {isCreator
-                ? 'These works were sent back to you for changes'
-                : 'Works submitted for review'}
+                ? "These works were sent back to you for changes"
+                : "Works submitted for review"}
             </p>
           </div>
           <div className="divide-y divide-neutral-800">
@@ -288,12 +283,12 @@ async function DashboardContent() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="font-medium text-white">
-                      {w.title || w.video_type || 'Untitled work'}
+                      {w.title || w.video_type || "Untitled work"}
                     </div>
                     <div className="text-xs text-neutral-500">
-                      {clientNameMap.get(w.client_id) || 'Unknown client'}
+                      {clientNameMap.get(w.client_id) || "Unknown client"}
                       {!isCreator &&
-                        ` · by ${memberNameMap.get(w.creator_id) || 'Unknown'}`}
+                        ` · by ${memberNameMap.get(w.creator_id) || "Unknown"}`}
                     </div>
                   </div>
                   <span
@@ -306,7 +301,7 @@ async function DashboardContent() {
             ))}
             {needsAttention.length > 5 && (
               <Link
-                href={`/app/works?status=${isCreator ? 'rework' : 'in_review'}`}
+                href={`/app/works?status=${isCreator ? "rework" : "in_review"}`}
                 className="block px-4 py-2 text-center text-xs text-lime-400 hover:bg-neutral-900/40"
               >
                 View all {needsAttention.length} →
@@ -321,7 +316,7 @@ async function DashboardContent() {
         <div className="px-4 py-3 border-b border-neutral-800">
           <h2 className="font-semibold text-white">📅 Near Deadline</h2>
           <p className="text-xs text-neutral-500 mt-0.5">
-            {isCreator ? 'Your' : 'All'} works due in the next 14 days
+            {isCreator ? "Your" : "All"} works due in the next 14 days
           </p>
         </div>
         {nearDeadline.length === 0 ? (
@@ -331,15 +326,15 @@ async function DashboardContent() {
         ) : (
           <div className="divide-y divide-neutral-800">
             {nearDeadline.map((w) => {
-              const daysLeft = daysUntil(w.end_date!)
+              const daysLeft = daysUntil(w.end_date!);
               const urgencyColor =
                 daysLeft <= 1
-                  ? 'text-red-400'
+                  ? "text-red-400"
                   : daysLeft <= 3
-                    ? 'text-orange-400'
+                    ? "text-orange-400"
                     : daysLeft <= 7
-                      ? 'text-yellow-400'
-                      : 'text-neutral-300'
+                      ? "text-yellow-400"
+                      : "text-neutral-300";
 
               return (
                 <Link
@@ -350,11 +345,11 @@ async function DashboardContent() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="font-medium text-white truncate">
-                        {w.title || w.video_type || 'Untitled'}
+                        {w.title || w.video_type || "Untitled"}
                       </div>
                       <div className="text-xs text-neutral-500 mt-0.5 flex items-center gap-2">
                         <span>
-                          {clientNameMap.get(w.client_id) || 'Unknown client'}
+                          {clientNameMap.get(w.client_id) || "Unknown client"}
                         </span>
                         <span
                           className={`px-1.5 py-0.5 rounded border text-xs ${WORK_STATUS_COLORS[w.status as WorkStatus]}`}
@@ -363,7 +358,7 @@ async function DashboardContent() {
                         </span>
                         {!isCreator && (
                           <span className="text-neutral-600">
-                            · {memberNameMap.get(w.creator_id) || 'Unknown'}
+                            · {memberNameMap.get(w.creator_id) || "Unknown"}
                           </span>
                         )}
                       </div>
@@ -371,9 +366,9 @@ async function DashboardContent() {
                     <div className="text-right whitespace-nowrap">
                       <div className={`text-sm font-bold ${urgencyColor}`}>
                         {daysLeft === 0
-                          ? 'Today'
+                          ? "Today"
                           : daysLeft === 1
-                            ? 'Tomorrow'
+                            ? "Tomorrow"
                             : `${daysLeft} days`}
                       </div>
                       <div className="text-xs text-neutral-500">
@@ -382,7 +377,7 @@ async function DashboardContent() {
                     </div>
                   </div>
                 </Link>
-              )
+              );
             })}
           </div>
         )}
@@ -399,7 +394,9 @@ async function DashboardContent() {
           <section className="bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden">
             <div className="px-4 py-3 border-b border-neutral-800">
               <h2 className="font-semibold text-white">Works per Client</h2>
-              <p className="text-xs text-neutral-500 mt-0.5">Top 10 by volume</p>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                Top 10 by volume
+              </p>
             </div>
             {worksPerClientRanked.length === 0 ? (
               <div className="p-6 text-center text-neutral-500 text-sm">
@@ -423,7 +420,7 @@ async function DashboardContent() {
                         </span>
                       </div>
                       <span className="text-sm font-bold text-neutral-400">
-                        {row.count} {row.count === 1 ? 'work' : 'works'}
+                        {row.count} {row.count === 1 ? "work" : "works"}
                       </span>
                     </div>
                   </Link>
@@ -442,7 +439,13 @@ async function DashboardContent() {
           </div>
           <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-neutral-800">
             {(
-              ['ongoing', 'in_review', 'rework', 'paused', 'completed'] as WorkStatus[]
+              [
+                "ongoing",
+                "in_review",
+                "rework",
+                "paused",
+                "completed",
+              ] as WorkStatus[]
             ).map((s) => (
               <Link
                 key={s}
@@ -461,7 +464,7 @@ async function DashboardContent() {
         </section>
       )}
     </>
-  )
+  );
 }
 
 function KpiCard({
@@ -471,29 +474,31 @@ function KpiCard({
   color,
   href,
 }: {
-  label: string
-  value: string | number
-  subtext: string
-  color: 'white' | 'yellow' | 'blue' | 'green' | 'purple'
-  href?: string
+  label: string;
+  value: string | number;
+  subtext: string;
+  color: "white" | "yellow" | "blue" | "green" | "purple";
+  href?: string;
 }) {
   const valueColors: Record<string, string> = {
-    white: 'text-white',
-    yellow: 'text-yellow-400',
-    blue: 'text-blue-400',
-    green: 'text-green-400',
-    purple: 'text-purple-400',
-  }
+    white: "text-white",
+    yellow: "text-yellow-400",
+    blue: "text-blue-400",
+    green: "text-green-400",
+    purple: "text-purple-400",
+  };
 
   const card = (
     <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-4 h-full hover:border-neutral-600 transition-colors">
-      <p className="text-neutral-400 text-xs uppercase tracking-wide">{label}</p>
+      <p className="text-neutral-400 text-xs uppercase tracking-wide">
+        {label}
+      </p>
       <p className={`text-2xl font-bold ${valueColors[color]} mt-1`}>{value}</p>
       <p className="text-neutral-500 text-xs mt-1">{subtext}</p>
     </div>
-  )
+  );
 
-  return href ? <Link href={href}>{card}</Link> : card
+  return href ? <Link href={href}>{card}</Link> : card;
 }
 
 function DashboardSkeleton() {
@@ -508,5 +513,5 @@ function DashboardSkeleton() {
       <div className="h-48 rounded-lg bg-neutral-900" />
       <div className="h-64 rounded-lg bg-neutral-900" />
     </div>
-  )
+  );
 }
