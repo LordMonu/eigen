@@ -695,87 +695,70 @@ export default function SyncPage() {
             Pull Higgsfield generations and attribute them to a work.
           </p>
         </div>
-        <Button
-          onClick={handleSync}
-          disabled={syncing || accessibleAccounts.length === 0}
-          className="bg-lime-400 hover:bg-lime-300 text-black font-semibold"
-        >
-          {syncing ? "Syncing…" : "⟳ Sync from Higgsfield"}
-        </Button>
-      </div>
-
-      {/* ACCESSIBLE ACCOUNTS BANNER */}
-      {accessibleAccounts.length > 0 ? (
-        <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3">
-          <div className="text-xs text-neutral-500 mb-1.5">
-            Syncing from {accessibleAccounts.length} Higgsfield account
-            {accessibleAccounts.length === 1 ? "" : "s"} you have access to:
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {accessibleAccounts.map((acc) => (
-              <span
-                key={acc.id}
-                className="text-xs px-2 py-1 rounded border border-lime-800 bg-lime-950/30 text-lime-300"
-                title={acc.hf_email || ""}
-              >
-                {acc.label}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : (
-        <div className="bg-yellow-950/30 border border-yellow-900 text-yellow-300 px-4 py-3 rounded text-sm">
-          {userRole === "master" ? (
-            <>
-              No Higgsfield accounts connected yet.{" "}
-              <Link
-                href="/app/settings"
-                className="text-lime-400 hover:underline"
-              >
-                Add one in Settings
-              </Link>{" "}
-              to start syncing.
-            </>
-          ) : (
-            <>
-              You don&apos;t have access to any Higgsfield account yet. Ask your
-              admin to grant you access from the Users page.
-            </>
+        <section className="flex gap-2">
+          {/* ACCESSIBLE ACCOUNTS BANNER */}
+          {accessibleAccounts.length > 0 ? null : (
+            <div className="bg-yellow-950/30 border border-yellow-900 text-yellow-300 px-4 py-3 rounded text-sm">
+              {userRole === "master" ? (
+                <>
+                  No Higgsfield accounts connected yet.{" "}
+                  <Link
+                    href="/app/settings"
+                    className="text-lime-400 hover:underline"
+                  >
+                    Add one in Settings
+                  </Link>{" "}
+                  to start syncing.
+                </>
+              ) : (
+                <>
+                  You don&apos;t have access to any Higgsfield account yet. Ask
+                  your admin to grant you access from the Users page.
+                </>
+              )}
+            </div>
           )}
-        </div>
-      )}
 
-      {syncMessage && (
-        <div className="bg-green-950/50 border border-green-800 text-green-300 px-4 py-2 rounded text-sm">
-          ✓ {syncMessage}
-        </div>
-      )}
-      {syncError && (
-        <div className="bg-red-950/50 border border-red-800 text-red-300 px-4 py-2 rounded text-sm flex items-center justify-between">
-          <span>✗ {syncError}</span>
-          {syncError.includes("Settings") && (
-            <Link
-              href="/app/settings"
-              className="text-lime-400 hover:underline text-xs ml-4"
-            >
-              Open Settings →
-            </Link>
+          {syncMessage && (
+            <div className="bg-green-950/50 border border-green-800 text-green-300 px-4 py-1 rounded-lg text-sm">
+              ✓ {syncMessage}
+            </div>
           )}
-        </div>
-      )}
+          {syncError && (
+            <div className="bg-red-950/50 border border-red-800 text-red-300 px-4 py-2 rounded text-sm flex items-center justify-between">
+              <span>✗ {syncError}</span>
+              {syncError.includes("Settings") && (
+                <Link
+                  href="/app/settings"
+                  className="text-lime-400 hover:underline text-xs ml-4"
+                >
+                  Open Settings →
+                </Link>
+              )}
+            </div>
+          )}
 
-      {rowError && (
-        <div className="bg-red-950/50 border border-red-800 text-red-300 px-4 py-2 rounded text-sm flex items-center justify-between">
-          <span>{rowError}</span>
-          <button
-            type="button"
-            onClick={() => setRowError(null)}
-            className="text-neutral-400 hover:text-white text-xs ml-4"
+          {rowError && (
+            <div className="bg-red-950/50 border border-red-800 text-red-300 px-4 py-2 rounded text-sm flex items-center justify-between">
+              <span>{rowError}</span>
+              <button
+                type="button"
+                onClick={() => setRowError(null)}
+                className="text-neutral-400 hover:text-white text-xs ml-4"
+              >
+                dismiss
+              </button>
+            </div>
+          )}
+          <Button
+            onClick={handleSync}
+            disabled={syncing || accessibleAccounts.length === 0}
+            className="bg-lime-400 hover:bg-lime-300 text-black font-semibold"
           >
-            dismiss
-          </button>
-        </div>
-      )}
+            {syncing ? "Syncing…" : "⟳ Sync from Higgsfield"}
+          </Button>
+        </section>
+      </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-4">
@@ -809,14 +792,14 @@ export default function SyncPage() {
 
       {/* UNASSIGNED — per-row client filter + required work + buttons */}
       <div className="bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-neutral-800 flex items-center justify-between">
+        <div className="px-4 py-2 border-b border-neutral-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <h2 className="font-semibold">Unassigned Generations</h2>
             <span className="text-sm font-bold text-yellow-400 font-mono">
               {totalUnassigned.toFixed(1)} cr
             </span>
             {accessibleAccounts.length > 0 && (
-              <div className="px-4 py-2 border-b border-neutral-800 bg-neutral-900/50 flex flex-wrap gap-2 items-center">
+              <div className="px-4 py- border-b border-neutral-800 bg-neutral-900/50 flex flex-wrap gap-2 items-center">
                 <span className="text-xs text-neutral-500">Account:</span>
                 {accessibleAccounts.map((acc) => (
                   <button
@@ -828,7 +811,7 @@ export default function SyncPage() {
                       setHasMoreUnassigned(false);
                       void loadTab("unassigned", 1);
                     }}
-                    className={`text-xs px-2 py-1 rounded transition-colors ${
+                    className={`text-[10px] px-1 py-0.5 rounded transition-colors ${
                       selectedAccountId === acc.id
                         ? "bg-lime-400 text-black"
                         : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
@@ -886,7 +869,7 @@ export default function SyncPage() {
                     group.items.length > 0 &&
                     group.items.every((g) => selectedUnassignedIds.has(g.id));
                   return (
-                    <section key={group.label} className="px-4 py-4">
+                    <section key={group.label} className="px-4 py-2">
                       <button
                         type="button"
                         onClick={() => toggleUnassignedDay(group.items)}
@@ -932,7 +915,7 @@ export default function SyncPage() {
                                   e.stopPropagation();
                                   toggleUnassignedSelection(gen.id);
                                 }}
-                                className={`absolute left-3 top-3 z-10 flex size-8 items-center justify-center rounded-xl border-2 backdrop-blur-sm transition ${
+                                className={`absolute left-3 top-3 z-10 flex size-8 items-center justify-center rounded-lg border-2 backdrop-blur-sm transition ${
                                   checked
                                     ? "border-lime-400 bg-lime-400 text-black"
                                     : "border-white/25 bg-black/35 text-transparent hover:border-white/45"
@@ -1065,7 +1048,8 @@ export default function SyncPage() {
                     ) : (
                       worksFor(bulkClientId).map((w) => (
                         <SelectItem key={w.id} value={w.id}>
-                          {workTitle(w)} · {clientNameMap[w.client_id] || "Unknown"}
+                          {workTitle(w)} ·{" "}
+                          {clientNameMap[w.client_id] || "Unknown"}
                         </SelectItem>
                       ))
                     )}
@@ -1419,9 +1403,8 @@ export default function SyncPage() {
             </span>
           </div>
           <p className="text-xs text-neutral-600">
-            R&amp;D / practice / past / failed work.
-            Excluded from credits &amp; reports. Unmark to put back in the
-            unassigned pool.
+            R&amp;D / practice / past / failed work. Excluded from credits &amp;
+            reports. Unmark to put back in the unassigned pool.
           </p>
         </div>
         {irrelevantTotal === 0 ? (

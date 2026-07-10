@@ -98,13 +98,13 @@ CREATE POLICY "Read works role-scoped" ON works
     )
   );
 
--- Insert: master/manager only
+-- Insert: master/manager/head_designer only
 DROP POLICY IF EXISTS "Master manager insert works" ON works;
 CREATE POLICY "Master manager insert works" ON works
   FOR INSERT TO authenticated
   WITH CHECK (
     org_id IN (SELECT user_active_org_ids())
-    AND user_role_in_org(org_id) IN ('master', 'manager')
+    AND user_role_in_org(org_id) IN ('master', 'manager', 'head_designer')
   );
 
 -- Update: master/manager any; creator only their own (transitions enforced in API)

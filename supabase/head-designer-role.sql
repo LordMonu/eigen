@@ -1,7 +1,5 @@
 -- EIGEN — add head_designer role with the same access level as manager.
--- Run this once in Supabase SQL Editor.
-
-ALTER TYPE membership_role ADD VALUE IF NOT EXISTS 'head_designer';
+-- Run this AFTER supabase/head-designer-role-enum.sql.
 
 -- Clients
 DROP POLICY IF EXISTS "Insert org clients" ON clients;
