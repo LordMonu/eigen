@@ -30,9 +30,14 @@ interface VideoType {
   id: string
   name: string
 }
+interface ClientOption {
+  id: string
+  name: string
+}
 interface WorkData {
   id: string
   title: string | null
+  client_id: string
   creator_id: string
   video_type: string | null
   max_credits: number | null
@@ -81,16 +86,18 @@ export function EditWorkDialog({ open, onOpenChange, work }: Props) {
   const [startTime, setStartTime] = useState(work.start_time || '')
   const [endTime, setEndTime] = useState(work.end_time || '')
   const [notes, setNotes] = useState(work.notes || '')
+  const [clientId, setClientId] = useState(work.client_id)
 
   const [members, setMembers] = useState<Member[]>([])
   const [videoTypes, setVideoTypes] = useState<VideoType[]>([])
+  const [clients, setClients] = useState<ClientOption[]>([])
 
   useEffect(() => {
     if (!open) return
     let cancelled = false
     async function load() {
       const supabase = createClient()
-      const [{ data: m }, { data: vt }, { data: wc }] = await Promise.all([
+      const [{ data: m }, { data: vt }, { data: wc }, { data: clientRows }] = await Promise.all([
         supabase
           .from('memberships')
           .select('user_id, full_name, role')
@@ -101,10 +108,17 @@ export function EditWorkDialog({ open, onOpenChange, work }: Props) {
           .select('user_id, added_at')
           .eq('work_id', work.id)
           .order('added_at', { ascending: true }),
+        supabase
+          .from('clients')
+          .select('id, name')
+          .is('deleted_at', null)
+          .order('name'),
       ])
       if (cancelled) return
       setMembers(m || [])
       setVideoTypes(vt || [])
+      setClients(clientRows || [])
+      setClientId(work.client_id)
       // Hydrate creatorIds from work_creators; ensure the primary
       // creator_id is the first entry so the UI shows the "primary" pill on
       // the right person.
@@ -120,7 +134,7 @@ export function EditWorkDialog({ open, onOpenChange, work }: Props) {
     return () => {
       cancelled = true
     }
-  }, [open, work.id, work.creator_id])
+  }, [open, work.id, work.creator_id, work.client_id])
 
   async function handleAddVideoType() {
     if (!newVideoTypeName.trim() || savingVideoType) return
@@ -186,6 +200,7 @@ export function EditWorkDialog({ open, onOpenChange, work }: Props) {
           // primary so existing fast paths keep working.
           creator_id: creatorIds[0],
           creator_ids: creatorIds,
+          client_id: clientId,
           video_type: videoType || null,
           max_credits: maxCredits ? parseFloat(maxCredits) : null,
           start_date: startDate || null,
@@ -221,6 +236,37 @@ export function EditWorkDialog({ open, onOpenChange, work }: Props) {
         </DialogHeader>
 
         <div className="space-y-4 py-2 max-h-[60vh] overflow-y-auto">
+          <div>
+            <Label className="text-neutral-300">Client</Label>
+            <Select
+              value={clientId}
+              onValueChange={(value) => setClientId(value || '')}
+            >
+              <SelectTrigger className="mt-1 bg-neutral-900 border-neutral-700">
+                <SelectValue placeholder="Select client...">
+                  {(value) => {
+                    const selected = clients.find(
+                      (client) => client.id === (value as string | null),
+                    )
+                    return selected?.name || 'Select client...'
+                  }}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {clients.map((client) => (
+                  <SelectItem key={client.id} value={client.id}>
+                    {client.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {clientId !== work.client_id && (
+              <p className="mt-1 text-[11px] text-amber-300">
+                Changing client will shift all generations already attached to this work to the new client too.
+              </p>
+            )}
+          </div>
+
           <div>
             <Label className="text-neutral-300">Title</Label>
             <Input

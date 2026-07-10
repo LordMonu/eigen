@@ -9,6 +9,7 @@ import { DeleteWorkButton } from './delete-work-button'
 interface WorkData {
   id: string
   title: string | null
+  client_id: string
   creator_id: string
   video_type: string | null
   max_credits: number | null

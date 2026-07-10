@@ -307,6 +307,7 @@ async function WorkDetailContent({ id }: { id: string }) {
             work={{
               id: work.id,
               title: work.title,
+              client_id: work.client_id,
               creator_id: work.creator_id,
               video_type: work.video_type,
               max_credits: work.max_credits

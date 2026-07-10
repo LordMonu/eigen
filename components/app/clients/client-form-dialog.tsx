@@ -44,6 +44,7 @@ interface Props {
   onOpenChange: (open: boolean) => void
   mode: 'create' | 'edit'
   initialData?: ClientData
+  onCreated?: (client: { id: string; name: string; industry: string | null }) => void
 }
 
 export function ClientFormDialog({
@@ -51,6 +52,7 @@ export function ClientFormDialog({
   onOpenChange,
   mode,
   initialData,
+  onCreated,
 }: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -62,6 +64,7 @@ export function ClientFormDialog({
             mode={mode}
             initialData={initialData}
             onOpenChange={onOpenChange}
+            onCreated={onCreated}
           />
         )}
       </DialogContent>
@@ -73,10 +76,12 @@ function ClientForm({
   mode,
   initialData,
   onOpenChange,
+  onCreated,
 }: {
   mode: 'create' | 'edit'
   initialData?: ClientData
   onOpenChange: (open: boolean) => void
+  onCreated?: (client: { id: string; name: string; industry: string | null }) => void
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -207,6 +212,11 @@ function ClientForm({
           throw insertError
         }
         if (inserted?.id) {
+          onCreated?.({
+            id: inserted.id,
+            name: name.trim(),
+            industry: industry.trim() || null,
+          })
           fetch('/api/activity-log', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

@@ -94,6 +94,7 @@ export function ClientCard({ client, archived, canCreateWork }: Props) {
       {archived ? (
         <Link
           href={`/app/clients/${client.id}`}
+          prefetch={false}
           className="block rounded-lg p-4 transition-colors border bg-neutral-950 border-neutral-800 opacity-60 bg-gradient-to-br from-neutral-800/30 via-neutral-900 to-neutral-800/30"
         >
           {content}
@@ -101,6 +102,7 @@ export function ClientCard({ client, archived, canCreateWork }: Props) {
       ) : (
         <Link
           href={`/app/clients/${client.id}`}
+          prefetch={false}
           className="block rounded-lg p-4 transition-colors border bg-neutral-950 border-neutral-800 hover:border-neutral-600 group"
         >
           {content}

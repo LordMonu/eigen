@@ -256,6 +256,7 @@ export function WorksView({
                   <Link
                     key={w.id}
                     href={`/app/works/${w.id}`}
+                    prefetch={false}
                     className="block bg-neutral-950 border border-neutral-800 hover:border-neutral-600 rounded-lg p-4 transition-colors group"
                   >
                     {cardContent}

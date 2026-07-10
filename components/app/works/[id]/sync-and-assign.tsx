@@ -1,10 +1,18 @@
 "use client";
 
-import { useState, useCallback, useTransition, useEffect } from "react";
+import {
+  useState,
+  useCallback,
+  useTransition,
+  useEffect,
+  useMemo,
+} from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
 import { Button } from "@/components/ui/button";
 import { RefreshCw } from "lucide-react";
+import { ClientFormDialog } from "@/components/app/clients/client-form-dialog";
+import { CreateWorkDialog } from "@/components/app/works/create-work-dialog";
 import {
   fetchSyncStats,
   fetchSyncTabPage,
@@ -21,8 +29,9 @@ import {
   type CreatorStat,
   type UnassignedGeneration,
 } from "./sync-and-assign-modals";
+import { runConcurrentBatches } from "@/lib/run-concurrent-batches";
 
-const PICKER_BATCH_SIZE = 80;
+const PICKER_BATCH_SIZE = 50;
 
 type DayGroup<T> = { label: string; items: T[] };
 
@@ -64,95 +73,6 @@ interface Props {
   creatorStats: CreatorStat[];
   accounts: Account[];
   readOnly?: boolean;
-}
-
-function MediaPreview({
-  url,
-  mediaType,
-  name,
-  className,
-}: {
-  url: string;
-  mediaType: string;
-  name: string;
-  className?: string;
-}) {
-  const sizeClass = className ?? "w-32 h-22 2xl:w-40 2xl:h-28";
-  const [failed, setFailed] = useState(false);
-  const looksAudio =
-    /\b(text\s*to\s*speech|tts|voiceover|seed\s*audio|audio|speech|voice)\b/i.test(
-      name,
-    );
-
-  if (!url) {
-    return (
-      <div
-        className={`flex items-center justify-center rounded bg-neutral-800 text-[10px] text-neutral-600 ${sizeClass}`}
-      >
-        —
-      </div>
-    );
-  }
-  if (mediaType === "audio") {
-    return (
-      <div
-        className={`flex items-center justify-center rounded border border-neutral-700 bg-neutral-900 text-[10px] uppercase tracking-[0.2em] text-sky-300 ${sizeClass}`}
-      >
-        audio
-      </div>
-    );
-  }
-  if (failed && looksAudio) {
-    return (
-      <div
-        className={`flex items-center justify-center rounded border border-neutral-700 bg-neutral-900 text-[10px] uppercase tracking-[0.2em] text-sky-300 ${sizeClass}`}
-      >
-        audio
-      </div>
-    );
-  }
-  if (failed) {
-    return (
-      <div
-        className={`flex items-center justify-center rounded bg-neutral-800 text-[10px] text-neutral-600 ${sizeClass}`}
-      >
-        —
-      </div>
-    );
-  }
-  if (mediaType === "video") {
-    return (
-      <div className={`${sizeClass} overflow-hidden rounded bg-black`}>
-        <video
-          src={url}
-          className="h-full w-full object-cover"
-          preload="metadata"
-          muted
-          onError={() => setFailed(true)}
-          onMouseEnter={(e) => {
-            void (e.currentTarget as HTMLVideoElement).play();
-          }}
-          onMouseLeave={(e) => {
-            const video = e.currentTarget as HTMLVideoElement;
-            video.pause();
-            video.currentTime = 0;
-          }}
-        />
-      </div>
-    );
-  }
-  return (
-    <div className={`${sizeClass} overflow-hidden rounded bg-neutral-800`}>
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={url}
-        alt={name}
-        className="h-full w-full object-cover"
-        loading="lazy"
-        onError={() => setFailed(true)}
-      />
-    </div>
-  );
 }
 
 export function SyncAndAssign({
@@ -204,16 +124,28 @@ export function SyncAndAssign({
     { id: string; title: string | null }[]
   >([{ id: workId, title: workTitle }]);
   const [loadingSel, setLoadingSel] = useState(false);
-
-  const [markingIrrelevant, setMarkingIrrelevant] = useState<string | null>(
-    null,
+  const [clientDialogOpen, setClientDialogOpen] = useState(false);
+  const [workDialogOpen, setWorkDialogOpen] = useState(false);
+  const selectedAccount = useMemo(
+    () => accounts.find((a) => a.id === selectedAccountId),
+    [accounts, selectedAccountId],
   );
-
-  const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
-  const visibleUnassigned = unassigned.filter(
-    (g) => g.media_type !== "feature",
+  const selectedDestinationClient = useMemo(
+    () => selClients.find((client) => client.id === destClientId) ?? null,
+    [destClientId, selClients],
   );
-  const groupedUnassigned = groupByDay(visibleUnassigned);
+  const visibleUnassigned = useMemo(
+    () => unassigned.filter((g) => g.media_type !== "feature"),
+    [unassigned],
+  );
+  const groupedUnassigned = useMemo(
+    () => groupByDay(visibleUnassigned),
+    [visibleUnassigned],
+  );
+  const orderedUnassignedIds = useMemo(
+    () => visibleUnassigned.map((generation) => generation.id),
+    [visibleUnassigned],
+  );
 
   useEffect(() => {
     if (!selectedAccountId) return;
@@ -227,7 +159,11 @@ export function SyncAndAssign({
   const loadPickerPage = useCallback(
     async (
       page: number,
-      options: { append?: boolean; silent?: boolean } = {},
+      options: {
+        append?: boolean;
+        silent?: boolean;
+        includeCount?: boolean;
+      } = {},
     ) => {
       const append = options.append === true;
       if (!options.silent) {
@@ -240,7 +176,7 @@ export function SyncAndAssign({
         page,
         selectedAccount?.label ?? null,
         {
-          count: "exact",
+          count: (options.includeCount ?? !append) ? "exact" : undefined,
           excludeFeatures: true,
           pageSize: PICKER_BATCH_SIZE,
         },
@@ -252,7 +188,11 @@ export function SyncAndAssign({
         return [...prev, ...data.filter((g) => !seen.has(g.id))];
       });
       if (count != null) setUnassignedTotal(count);
-      setHasMoreUnassigned(page * PICKER_BATCH_SIZE < nextTotal);
+      setHasMoreUnassigned(
+        count != null
+          ? page * PICKER_BATCH_SIZE < nextTotal
+          : data.length === PICKER_BATCH_SIZE,
+      );
       if (!options.silent) {
         if (append) setLoadingMoreUnassigned(false);
         else setLoadingUnassigned(false);
@@ -271,16 +211,19 @@ export function SyncAndAssign({
     }
   }, [supabase, selectedAccount?.label]);
 
-  function loadMorePicker() {
+  const loadMorePicker = useCallback(() => {
     const nextPage = pickerPage + 1;
     setPickerPage(nextPage);
-    void loadPickerPage(nextPage, { append: true });
-  }
+    void loadPickerPage(nextPage, { append: true, includeCount: false });
+  }, [loadPickerPage, pickerPage]);
 
   useEffect(() => {
     if (pickerOpen && selectedAccountId) {
       setPickerPage(1);
-      void Promise.all([loadPickerStats(), loadPickerPage(1)]);
+      void Promise.all([
+        loadPickerStats(),
+        loadPickerPage(1, { includeCount: true }),
+      ]);
     }
   }, [selectedAccountId, pickerOpen, loadPickerStats, loadPickerPage]);
 
@@ -323,6 +266,65 @@ export function SyncAndAssign({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destClientId, destOpen]);
 
+  const reloadDestinationClients = useCallback(async () => {
+    const { data } = await supabase
+      .from("clients")
+      .select("id, name")
+      .is("deleted_at", null)
+      .order("name");
+
+    const nextClients =
+      data && data.length > 0 ? data : [{ id: clientId, name: clientName }];
+    setSelClients(nextClients);
+    return nextClients;
+  }, [clientId, clientName, supabase]);
+
+  const reloadDestinationWorks = useCallback(
+    async (nextClientId: string) => {
+      const { data } = await supabase
+        .from("works")
+        .select("id, title")
+        .eq("client_id", nextClientId)
+        .is("deleted_at", null)
+        .order("title");
+
+      const nextWorks = data && data.length > 0 ? data : [];
+      setSelWorks(nextWorks);
+      setDestWorkId((prev) =>
+        nextWorks.find((work) => work.id === prev)
+          ? prev
+          : (nextWorks[0]?.id ?? ""),
+      );
+      return nextWorks;
+    },
+    [supabase],
+  );
+
+  const openCreateWorkShortcut = useCallback(() => {
+    if (!destClientId) {
+      setBatchError("Pick a client first, then add a new work for it.");
+      return;
+    }
+    setWorkDialogOpen(true);
+  }, [destClientId]);
+
+  const handleQuickWorkCreated = useCallback(
+    (work: { id: string; title: string | null; clientId: string }) => {
+      setSelWorks((prev) => {
+        const next = [{ id: work.id, title: work.title }, ...prev];
+        const seen = new Set<string>();
+        return next.filter((row) => {
+          if (seen.has(row.id)) return false;
+          seen.add(row.id);
+          return true;
+        });
+      });
+      setDestClientId(work.clientId);
+      setDestWorkId(work.id);
+    },
+    [],
+  );
+
   async function syncAccount(force = false, full = false) {
     if (!selectedAccountId) return;
     if (!force && isCooldownActive(selectedAccountId)) return;
@@ -355,10 +357,7 @@ export function SyncAndAssign({
       setRangeAnchorId(null);
       setPickerPage(1);
       await loadPickerStats();
-      await loadPickerPage(1, { silent: true });
-      startTransition(() => {
-        router.refresh();
-      });
+      await loadPickerPage(1, { silent: true, includeCount: true });
     } catch (err) {
       setSyncError(
         `Sync failed: ${err instanceof Error ? err.message : "network error"}`,
@@ -376,20 +375,17 @@ export function SyncAndAssign({
     setPickerPage(1);
     setPickerOpen(true);
 
-    await Promise.all([loadPickerStats(), loadPickerPage(1)]);
-
     if (!isCooldownActive(selectedAccountId)) {
       await syncAccount();
     }
   }
 
-  function toggleSelect(genId: string) {
-    const orderedIds = visibleUnassigned.map((g) => g.id);
+  const toggleSelect = useCallback((genId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      const currentIndex = orderedIds.indexOf(genId);
+      const currentIndex = orderedUnassignedIds.indexOf(genId);
       const anchorIndex = rangeAnchorId
-        ? orderedIds.indexOf(rangeAnchorId)
+        ? orderedUnassignedIds.indexOf(rangeAnchorId)
         : -1;
 
       if (
@@ -402,7 +398,9 @@ export function SyncAndAssign({
           anchorIndex < currentIndex
             ? [anchorIndex, currentIndex]
             : [currentIndex, anchorIndex];
-        for (let i = start; i <= end; i++) next.add(orderedIds[i]);
+        for (let i = start; i <= end; i++) {
+          next.add(orderedUnassignedIds[i]);
+        }
       } else if (next.has(genId)) {
         next.delete(genId);
       } else {
@@ -411,9 +409,9 @@ export function SyncAndAssign({
       return next;
     });
     setRangeAnchorId(genId);
-  }
+  }, [orderedUnassignedIds, rangeAnchorId]);
 
-  function toggleSelectDay(items: UnassignedGeneration[]) {
+  const toggleSelectDay = useCallback((items: Array<{ id: string }>) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       const allSelected = items.every((g) => next.has(g.id));
@@ -423,12 +421,12 @@ export function SyncAndAssign({
       });
       return next;
     });
-  }
+  }, []);
 
   const allVisibleSelected =
     unassigned.length > 0 && unassigned.every((g) => selectedIds.has(g.id));
 
-  function toggleSelectAllVisible() {
+  const toggleSelectAllVisible = useCallback(() => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (allVisibleSelected) {
@@ -438,7 +436,7 @@ export function SyncAndAssign({
       }
       return next;
     });
-  }
+  }, [allVisibleSelected, unassigned]);
 
   function openDestination() {
     if (selectedIds.size === 0) return;
@@ -456,8 +454,9 @@ export function SyncAndAssign({
 
     const failures: string[] = [];
     const assignedIds: string[] = [];
-    await Promise.all(
-      ids.map(async (gid) => {
+    await runConcurrentBatches(
+      ids,
+      async (gid) => {
         const res = await fetch(
           `/api/works/${targetWorkId}/assign-generation`,
           {
@@ -475,12 +474,14 @@ export function SyncAndAssign({
           return;
         }
         assignedIds.push(gid);
-      }),
+      },
+      8,
     );
 
     if (mode === "waste" && assignedIds.length > 0) {
-      await Promise.all(
-        assignedIds.map(async (gid) => {
+      await runConcurrentBatches(
+        assignedIds,
+        async (gid) => {
           const res = await fetch(`/api/generations/${gid}/waste`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -492,13 +493,15 @@ export function SyncAndAssign({
               `${gid.slice(0, 8)} (waste): ${d?.error || res.statusText}`,
             );
           }
-        }),
+        },
+        8,
       );
     }
 
     if (mode === "irrelevant" && assignedIds.length > 0) {
-      await Promise.all(
-        assignedIds.map(async (gid) => {
+      await runConcurrentBatches(
+        assignedIds,
+        async (gid) => {
           const res = await fetch(`/api/generations/${gid}/irrelevant`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -510,7 +513,8 @@ export function SyncAndAssign({
               `${gid.slice(0, 8)} (irrelevant): ${d?.error || res.statusText}`,
             );
           }
-        }),
+        },
+        8,
       );
     }
 
@@ -530,7 +534,7 @@ export function SyncAndAssign({
       setPickerPage(1);
       await Promise.all([
         loadPickerStats(),
-        loadPickerPage(1, { silent: true }),
+        loadPickerPage(1, { silent: true, includeCount: true }),
       ]);
       setSelectedIds(new Set());
       return;
@@ -546,6 +550,50 @@ export function SyncAndAssign({
 
   return (
     <>
+      <ClientFormDialog
+        open={clientDialogOpen}
+        onOpenChange={(open) => {
+          setClientDialogOpen(open);
+          if (!open) {
+            window.setTimeout(() => {
+              void reloadDestinationClients();
+            }, 250);
+          }
+        }}
+        mode="create"
+        onCreated={(client) => {
+          setSelClients((prev) => {
+            const next = [{ id: client.id, name: client.name }, ...prev];
+            const seen = new Set<string>();
+            return next.filter((row) => {
+              if (seen.has(row.id)) return false;
+              seen.add(row.id);
+              return true;
+            });
+          });
+          setDestClientId(client.id);
+          setDestWorkId("");
+          setBatchError(null);
+        }}
+      />
+      {selectedDestinationClient && (
+        <CreateWorkDialog
+          open={workDialogOpen}
+          onOpenChange={(open) => {
+            setWorkDialogOpen(open);
+            if (!open) {
+              window.setTimeout(() => {
+                void reloadDestinationWorks(selectedDestinationClient.id);
+              }, 250);
+            }
+          }}
+          clientId={selectedDestinationClient.id}
+          clientName={selectedDestinationClient.name}
+          mode="full"
+          onCreated={handleQuickWorkCreated}
+          redirectOnCreate={false}
+        />
+      )}
       <section className="bg-neutral-950 border border-neutral-800 rounded-lg overflow-hidden flex flex-col">
         <div className="px-4 py-3 border-b border-neutral-800">
           <h2 className="font-semibold text-white text-sm">
@@ -669,31 +717,31 @@ export function SyncAndAssign({
           setPickerPage(1);
           setSelectedIds(new Set());
           setRangeAnchorId(null);
-          void Promise.all([loadPickerStats(), loadPickerPage(1)]);
         }}
-        onRefresh={() => syncAccount(true)}
+        onRefresh={() => void syncAccount(true)}
         onFullResync={() => {
           if (
             window.confirm(
               "Full re-sync re-walks the ENTIRE Higgsfield history for this account to rebuild credit totals. It can take a minute. Continue?",
             )
           ) {
-            syncAccount(true, true);
+            void syncAccount(true, true);
           }
         }}
         onCancel={() => setPickerOpen(false)}
         onOpenDestination={openDestination}
         onLoadMore={loadMorePicker}
-        loadPickerStats={loadPickerStats}
-        loadPickerPage={loadPickerPage}
-        syncAccount={syncAccount}
         cooldownLeft={cooldownLeft}
         destOpen={destOpen}
-        setDestOpen={setDestOpen}
         destClientId={destClientId}
         setDestClientId={setDestClientId}
         destWorkId={destWorkId}
         setDestWorkId={setDestWorkId}
+        onCreateClientShortcut={() => {
+          setBatchError(null);
+          setClientDialogOpen(true);
+        }}
+        onCreateWorkShortcut={openCreateWorkShortcut}
         selClients={selClients}
         selWorks={selWorks}
         loadingSel={loadingSel}
@@ -702,7 +750,6 @@ export function SyncAndAssign({
         batchError={batchError}
         onRunBatch={runBatch}
         onDestClose={() => setDestOpen(false)}
-        userRole={userRole}
       />
     </>
   );

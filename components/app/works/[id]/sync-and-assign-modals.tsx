@@ -1,10 +1,9 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { Check, RefreshCw, X } from "lucide-react";
-import { MediaPreview } from "./assign-tables";
+import { RefreshCw, X } from "lucide-react";
 import { UnassignedGenerationsSkeleton } from "@/components/app/sync/unassigned-generations-skeleton";
-import type { Role } from "@/lib/roles";
+import { UnassignedGenerationsGrid } from "@/components/app/sync/unassigned-generations-grid";
 
 export interface UnassignedGeneration {
   id: string;
@@ -30,13 +29,6 @@ export interface CreatorStat {
   rework: number;
 }
 
-export interface MediaPreviewProps {
-  url: string;
-  mediaType: string;
-  name: string;
-  className?: string;
-}
-
 type Props = {
   pickerOpen: boolean;
   setPickerOpen: (open: boolean) => void;
@@ -56,7 +48,7 @@ type Props = {
   groupedUnassigned: { label: string; items: UnassignedGeneration[] }[];
   allVisibleSelected: boolean;
   toggleSelectAllVisible: () => void;
-  toggleSelectDay: (items: UnassignedGeneration[]) => void;
+  toggleSelectDay: (items: Array<{ id: string }>) => void;
   toggleSelect: (genId: string) => void;
   onAccountChange: (accountId: string) => void;
   onRefresh: () => void;
@@ -64,50 +56,23 @@ type Props = {
   onCancel: () => void;
   onOpenDestination: () => void;
   onLoadMore: () => void;
-  loadPickerStats: () => Promise<void>;
-  loadPickerPage: (
-    page: number,
-    options?: { append?: boolean; silent?: boolean },
-  ) => Promise<void>;
-  syncAccount: (force?: boolean, full?: boolean) => Promise<void>;
-  selectedAccountLabel?: string;
   cooldownLeft: number;
   batchBusy: null | "actual" | "waste" | "irrelevant";
   batchError: string | null;
   destOpen: boolean;
-  setDestOpen: (open: boolean) => void;
   destClientId: string;
   setDestClientId: (value: string) => void;
   destWorkId: string;
   setDestWorkId: (value: string) => void;
+  onCreateClientShortcut: () => void;
+  onCreateWorkShortcut: () => void;
   selClients: { id: string; name: string }[];
   selWorks: { id: string; title: string | null }[];
   loadingSel: boolean;
   selectedIdCount: number;
   onRunBatch: (mode: "actual" | "waste" | "irrelevant") => void;
   onDestClose: () => void;
-  userRole: Role;
 };
-
-function hfAssetUrl(externalId: string) {
-  return `https://higgsfield.ai/asset/all/${externalId}`;
-}
-
-function dayLabel(iso: string) {
-  const d = new Date(iso);
-  const today = new Date();
-  const sod = (dt: Date) =>
-    new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()).getTime();
-  const diffDays = Math.round((sod(today) - sod(d)) / 86400000);
-  if (diffDays === 0) return "Today";
-  if (diffDays === 1) return "Yesterday";
-  return d.toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: d.getFullYear() !== today.getFullYear() ? "numeric" : undefined,
-  });
-}
 
 export function SyncPickerModal({
   pickerOpen,
@@ -136,9 +101,6 @@ export function SyncPickerModal({
   onCancel,
   onOpenDestination,
   onLoadMore,
-  loadPickerStats,
-  loadPickerPage,
-  syncAccount,
   cooldownLeft,
   destOpen,
   batchBusy,
@@ -147,6 +109,8 @@ export function SyncPickerModal({
   setDestClientId,
   destWorkId,
   setDestWorkId,
+  onCreateClientShortcut,
+  onCreateWorkShortcut,
   selClients,
   selWorks,
   loadingSel,
@@ -196,7 +160,7 @@ export function SyncPickerModal({
                     <span className="text-neutral-700 mx-1">·</span>
                     <button
                       type="button"
-                      onClick={() => syncAccount(true)}
+                      onClick={onRefresh}
                       disabled={syncing}
                       className="text-xs text-orange-400 hover:text-orange-300 disabled:text-neutral-600 flex items-center gap-1"
                     >
@@ -297,78 +261,16 @@ export function SyncPickerModal({
                         </span>
                       </div>
                     )}
-                    {groupedUnassigned.map((group) => {
-                      const daySelected =
-                        group.items.length > 0 &&
-                        group.items.every((g) => selectedIds.has(g.id));
-                      return (
-                        <section key={group.label} className="px-4 py-4">
-                          <button
-                            type="button"
-                            onClick={() => toggleSelectDay(group.items)}
-                            className="mb-4 flex items-center gap-2 text-sm font-semibold text-white transition hover:text-lime-300"
-                          >
-                            <span
-                              className={`flex size-5 items-center justify-center rounded border-2 transition ${
-                                daySelected
-                                  ? "border-lime-400 bg-lime-400 text-black"
-                                  : "border-neutral-600 bg-transparent text-transparent"
-                              }`}
-                            >
-                              <Check className="size-3" />
-                            </span>
-                            <span>{group.label}</span>
-                          </button>
-                          <div className="grid grid-cols-2 gap-1.5 md:grid-cols-6 xl:grid-cols-14 2xl:grid-cols-16">
-                            {group.items.map((g) => {
-                              const checked = selectedIds.has(g.id);
-                              return (
-                                <a
-                                  key={g.id}
-                                  href={hfAssetUrl(g.external_id)}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  title="Open in Higgsfield"
-                                  className={`group relative block aspect-square rounded-lg xl:rounded-xl border bg-neutral-950 transition overflow-hidden ${
-                                    checked
-                                      ? "border-lime-400 shadow-[0_0_0_1px_rgba(163,230,53,0.45)]"
-                                      : "border-neutral-800 hover:border-neutral-600"
-                                  }`}
-                                >
-                                  <button
-                                    type="button"
-                                    aria-pressed={checked}
-                                    aria-label={
-                                      checked
-                                        ? `Deselect ${g.display_name}`
-                                        : `Select ${g.display_name}`
-                                    }
-                                    onClick={(e) => {
-                                      e.preventDefault();
-                                      e.stopPropagation();
-                                      toggleSelect(g.id);
-                                    }}
-                                    className={`absolute left-2.5 top-2.5 z-10 flex size-7 items-center justify-center rounded-lg border-2 backdrop-blur-sm transition ${
-                                      checked
-                                        ? "border-lime-400 bg-lime-400 text-black"
-                                        : "border-white/25 bg-black/35 text-transparent hover:border-white/45"
-                                    }`}
-                                  >
-                                    <Check className="size-3.5" />
-                                  </button>
-                                  <MediaPreview
-                                    url={g.result_url}
-                                    mediaType={g.media_type}
-                                    name={g.display_name}
-                                    className="h-full w-full object-cover"
-                                  />
-                                </a>
-                              );
-                            })}
-                          </div>
-                        </section>
-                      );
-                    })}
+                    <UnassignedGenerationsGrid
+                      groups={groupedUnassigned}
+                      selectedIds={selectedIds}
+                      onToggleDay={toggleSelectDay}
+                      onToggle={toggleSelect}
+                      sectionClassName="px-4 py-3"
+                      gridClassName="grid grid-cols-2 gap-1.5 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-[repeat(16,minmax(0,1fr))]"
+                      tileClassName="group relative block aspect-square overflow-hidden rounded-lg border bg-neutral-950 transition"
+                      checkboxClassName="absolute left-2 top-2 z-10 flex size-6 items-center justify-center rounded-lg border-2 border-white/25 bg-black/35 text-transparent backdrop-blur-sm transition hover:border-white/45"
+                    />
                   </>
                 )}
               </div>
@@ -443,10 +345,18 @@ export function SyncPickerModal({
                 </label>
                 <select
                   value={destClientId}
-                  onChange={(e) => setDestClientId(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value === "__create_client__") {
+                      onCreateClientShortcut()
+                      return
+                    }
+                    setDestClientId(value)
+                  }}
                   disabled={loadingSel || batchBusy !== null || isPending}
                   className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-sm text-white disabled:opacity-50 focus:outline-none focus:border-neutral-500"
                 >
+                  <option value="__create_client__">+ Add new client</option>
                   {selClients.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -460,15 +370,22 @@ export function SyncPickerModal({
                 </label>
                 <select
                   value={destWorkId}
-                  onChange={(e) => setDestWorkId(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    if (value === "__create_work__") {
+                      onCreateWorkShortcut()
+                      return
+                    }
+                    setDestWorkId(value)
+                  }}
                   disabled={
                     loadingSel ||
                     batchBusy !== null ||
-                    isPending ||
-                    selWorks.length === 0
+                    isPending
                   }
                   className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-sm text-white disabled:opacity-50 focus:outline-none focus:border-neutral-500"
                 >
+                  <option value="__create_work__">+ Add new work</option>
                   {selWorks.length === 0 ? (
                     <option value="">No works for this client</option>
                   ) : (

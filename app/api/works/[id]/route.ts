@@ -26,7 +26,9 @@ export async function PATCH(
 
     const { data: work } = await supabase
       .from('works')
-      .select('id, org_id')
+      .select(
+        'id, org_id, client_id, title, creator_id, video_type, max_credits, start_date, end_date, start_time, end_time, notes',
+      )
       .eq('id', id)
       .maybeSingle()
     if (!work) {
@@ -63,9 +65,49 @@ export async function PATCH(
     )
       ? body.creator_ids.filter((v: unknown) => typeof v === 'string')
       : undefined
+    const incomingClientId =
+      typeof body.client_id === 'string' && body.client_id.trim().length > 0
+        ? body.client_id
+        : undefined
 
-    if (Object.keys(update).length === 0 && !incomingCreatorIds) {
+    let clientMovedFrom: string | null = null
+    let clientMovedTo: string | null = null
+    const rollbackWorkUpdate: Record<string, unknown> = {}
+
+    if (Object.keys(update).length === 0 && !incomingCreatorIds && !incomingClientId) {
       return NextResponse.json({ error: 'No fields to update' }, { status: 400 })
+    }
+
+    if (incomingClientId && incomingClientId !== work.client_id) {
+      const { data: targetClient } = await supabase
+        .from('clients')
+        .select('id, org_id, name, deleted_at')
+        .eq('id', incomingClientId)
+        .maybeSingle()
+
+      if (!targetClient) {
+        return NextResponse.json({ error: 'Target client not found' }, { status: 404 })
+      }
+      if (targetClient.org_id !== work.org_id) {
+        return NextResponse.json({ error: 'Target client is outside this organization' }, { status: 403 })
+      }
+      if (targetClient.deleted_at) {
+        return NextResponse.json({ error: 'Cannot move work into an archived client' }, { status: 409 })
+      }
+
+      const { data: sourceClient } = await supabase
+        .from('clients')
+        .select('name')
+        .eq('id', work.client_id)
+        .maybeSingle()
+      update.client_id = incomingClientId
+      rollbackWorkUpdate.client_id = work.client_id
+      clientMovedFrom = sourceClient?.name ?? null
+      clientMovedTo = targetClient.name ?? null
+    }
+
+    for (const key of Object.keys(update)) {
+      rollbackWorkUpdate[key] = work[key as keyof typeof work] ?? null
     }
 
     if (Object.keys(update).length > 0) {
@@ -75,6 +117,32 @@ export async function PATCH(
         .eq('id', id)
       if (error) {
         return NextResponse.json({ error: error.message }, { status: 500 })
+      }
+    }
+
+    if (incomingClientId && incomingClientId !== work.client_id) {
+      const { error: generationsMoveError } = await supabase
+        .from('generations')
+        .update({ client_id: incomingClientId })
+        .eq('work_id', id)
+      if (generationsMoveError) {
+        const { error: rollbackError } = await supabase
+          .from('works')
+          .update(rollbackWorkUpdate)
+          .eq('id', id)
+
+        const rollbackSuffix = rollbackError
+          ? ` Rollback also failed: ${rollbackError.message}`
+          : ''
+
+        return NextResponse.json(
+          {
+            error:
+              `Failed to move assigned generations to the new client: ${generationsMoveError.message}. ` +
+              `The work was reverted.${rollbackSuffix}`,
+          },
+          { status: 500 },
+        )
       }
     }
 
@@ -134,8 +202,21 @@ export async function PATCH(
     }
 
     // Log the edit (non-blocking)
-    const { data: mem } = await supabase.from('memberships').select('full_name').eq('user_id', user.id).eq('org_id', work.org_id).maybeSingle()
-    logActivity(supabase, { orgId: work.org_id, entityType: 'work', entityId: id, action: 'edited', fromValue: null, toValue: null, actorName: mem?.full_name ?? 'Unknown' })
+    const { data: mem } = await supabase
+      .from('memberships')
+      .select('full_name')
+      .eq('user_id', user.id)
+      .eq('org_id', work.org_id)
+      .maybeSingle()
+    logActivity(supabase, {
+      orgId: work.org_id,
+      entityType: 'work',
+      entityId: id,
+      action: 'edited',
+      fromValue: clientMovedFrom,
+      toValue: clientMovedTo,
+      actorName: mem?.full_name ?? 'Unknown',
+    })
 
     return NextResponse.json({ success: true })
   } catch (err) {

@@ -1,16 +1,13 @@
 "use client";
-import { Fragment, useState, useEffect, useTransition } from "react";
+import { Fragment, useState, useEffect, useMemo, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Undo2 } from "lucide-react";
+import { Check, Undo2 } from "lucide-react";
 import type { WorkStatus } from "@/lib/work-helpers";
-import {
-  PaginationButtons,
-  paginate,
-} from "@/components/ui/pagination-buttons";
 import type { Role } from "@/lib/roles";
 import { isManagerLikeRole } from "@/lib/roles";
+import { runConcurrentBatches } from "@/lib/run-concurrent-batches";
 
 // Per spec: 60-second window for unassign-undo / mark-useful-undo.
 // Kept in sync with the same threshold on the unassign + waste API routes.
@@ -77,6 +74,25 @@ function groupByDay<T extends { hf_created_at: string }>(
   return groups;
 }
 
+function isUnassignAllowed({
+  userRole,
+  userId,
+  assignedAt,
+  assignedBy,
+}: {
+  userRole: string;
+  userId: string;
+  assignedAt: string | null;
+  assignedBy: string | null;
+}) {
+  const isMasterOrManager =
+    userRole === "master" || isManagerLikeRole(userRole);
+  if (isMasterOrManager) return true;
+  if (assignedBy !== userId || !assignedAt) return false;
+  const assignedTime = new Date(assignedAt).getTime();
+  return Date.now() - assignedTime < UNDO_WINDOW_MS;
+}
+
 export function MediaPreview({
   url,
   mediaType,
@@ -134,8 +150,9 @@ export function MediaPreview({
         <video
           src={url}
           className="h-full w-full rounded-[inherit] object-cover bg-black"
-          preload="metadata"
+          preload="none"
           muted
+          playsInline
           onError={() => setFailed(true)}
           onMouseEnter={(e) => {
             void (e.currentTarget as HTMLVideoElement).play();
@@ -159,6 +176,7 @@ export function MediaPreview({
         alt={name}
         className="h-full w-full rounded-[inherit] object-cover bg-neutral-800"
         loading="lazy"
+        decoding="async"
         onError={() => setFailed(true)}
       />
     </div>
@@ -173,6 +191,148 @@ function ReworkTag() {
     >
       Rework
     </Badge>
+  );
+}
+
+function hfAssetUrl(externalId: string) {
+  return `https://higgsfield.ai/asset/all/${externalId}`;
+}
+
+function PreviewTile({
+  generation,
+  checked,
+  selectable,
+  onToggle,
+}: {
+  generation: Generation;
+  checked: boolean;
+  selectable: boolean;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <a
+      href={hfAssetUrl(generation.external_id)}
+      target="_blank"
+      rel="noreferrer"
+      title="Open in Higgsfield"
+      className={`group relative block aspect-square overflow-hidden rounded-lg border bg-neutral-950 transition ${
+        checked
+          ? "border-lime-400 shadow-[0_0_0_1px_rgba(163,230,53,0.45)]"
+          : "border-neutral-800 hover:border-neutral-600"
+      } ${selectable ? "" : "opacity-70"}`}
+      style={{ contain: "layout paint style" }}
+    >
+      {selectable && (
+        <button
+          type="button"
+          aria-pressed={checked}
+          aria-label={
+            checked
+              ? `Deselect ${generation.display_name}`
+              : `Select ${generation.display_name}`
+          }
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onToggle(generation.id);
+          }}
+          className={`absolute left-2 top-2 z-10 flex size-6 items-center justify-center rounded-lg border-2 border-white/25 bg-black/35 text-transparent backdrop-blur-sm transition hover:border-white/45 ${
+            checked ? "border-lime-400 bg-lime-400 text-black" : ""
+          }`}
+        >
+          <Check className="size-3.5" />
+        </button>
+      )}
+      <MediaPreview
+        url={generation.result_url}
+        mediaType={generation.media_type}
+        name={generation.display_name}
+        className="h-full w-full object-cover"
+      />
+    </a>
+  );
+}
+
+function PreviewGridSection({
+  title,
+  total,
+  groups,
+  selectedIds,
+  onToggle,
+  onToggleDay,
+  selectableKey,
+  sectionClassName = "px-4 py-3",
+  gridClassName = "grid grid-cols-2 gap-1.5 md:grid-cols-5 xl:grid-cols-10",
+}: {
+  title: string;
+  total: number;
+  groups: DayGroup<Generation>[];
+  selectedIds: ReadonlySet<string>;
+  onToggle: (id: string) => void;
+  onToggleDay: (items: Array<{ id: string }>) => void;
+  selectableKey: (generation: Generation) => boolean;
+  sectionClassName?: string;
+  gridClassName?: string;
+}) {
+  return (
+    <section className={sectionClassName}>
+      <div className="mb-4 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-white">{title}</h3>
+          <Badge
+            variant="outline"
+            className="text-neutral-400 border-neutral-700"
+          >
+            {total}
+          </Badge>
+        </div>
+      </div>
+      <div className="divide-y divide-neutral-800">
+        {groups.map((group) => {
+          const selectableItems = group.items.filter(selectableKey);
+          const daySelected =
+            selectableItems.length > 0 &&
+            selectableItems.every((generation) => selectedIds.has(generation.id));
+
+          return (
+            <div key={group.label} className="py-3 first:pt-0">
+              <button
+                type="button"
+                onClick={() => onToggleDay(selectableItems)}
+                className="mb-4 flex items-center gap-2 text-sm font-semibold text-white transition hover:text-lime-300"
+                disabled={selectableItems.length === 0}
+              >
+                <span
+                  className={`flex size-5 items-center justify-center rounded border-2 transition ${
+                    daySelected
+                      ? "border-lime-400 bg-lime-400 text-black"
+                      : "border-neutral-600 bg-transparent text-transparent"
+                  }`}
+                >
+                  <Check className="size-3" />
+                </span>
+                <span>{group.label}</span>
+              </button>
+              <div className={gridClassName}>
+                {group.items.map((generation) => {
+                  const selectable = selectableKey(generation);
+                  const checked = selectedIds.has(generation.id);
+                  return (
+                    <PreviewTile
+                      key={generation.id}
+                      generation={generation}
+                      checked={checked}
+                      selectable={selectable}
+                      onToggle={onToggle}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </section>
   );
 }
 
@@ -380,6 +540,8 @@ export function AssignTables({
   const [selectedAccountLabel, setSelectedAccountLabel] = useState<string>(
     accounts[0]?.label || "",
   );
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   const allAssigned = assignedToClient.filter(
     (g) => !g.is_waste && !g.is_irrelevant && g.media_type !== "feature",
@@ -401,17 +563,16 @@ export function AssignTables({
   const assignedToThisWork = assignedUseful.filter((g) => g.work_id === workId);
   const assignedElsewhere = assignedUseful.filter((g) => g.work_id !== workId);
 
-  const [assignedPage, setAssignedPage] = useState(1);
-  const [wastedPage, setWastedPage] = useState(1);
-  const aPag = paginate(assignedUseful, assignedPage);
-  const wPag = paginate(wasted, wastedPage);
-  const groupedAssigned = groupByDay(aPag.slice);
-  const groupedWasted = groupByDay(wPag.slice);
+  const groupedAssigned = groupByDay(assignedUseful);
+  const groupedWasted = groupByDay(wasted);
   const groupedIrrelevant = groupByDay(allIrrelevant);
-
-  function hfAssetUrl(externalId: string) {
-    return `https://higgsfield.ai/asset/all/${externalId}`;
-  }
+  const generationIndex = useMemo(() => {
+    return new Map<string, Generation>([
+      ...assignedUseful.map((g) => [g.id, g] as const),
+      ...wasted.map((g) => [g.id, g] as const),
+      ...allIrrelevant.map((g) => [g.id, g] as const),
+    ]);
+  }, [assignedUseful, wasted, allIrrelevant]);
 
   // Total credits per bucket
   const totalAssignedCredits = assignedUseful.reduce(
@@ -439,6 +600,81 @@ export function AssignTables({
     );
   }
 
+  const canSelectGeneration = useCallback(
+    (generation: Generation) =>
+      isUnassignAllowed({
+        userRole,
+        userId,
+        assignedAt: generation.assigned_at ?? generation.wasted_at,
+        assignedBy: generation.assigned_by ?? generation.wasted_by,
+      }),
+    [userId, userRole],
+  );
+
+  const toggleSelection = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleSelectionGroup = useCallback((items: Array<{ id: string }>) => {
+    const allowed = items.filter((item) => generationIndex.has(item.id));
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = allowed.every((item) => next.has(item.id));
+      allowed.forEach((item) => {
+        if (allSelected) next.delete(item.id);
+        else next.add(item.id);
+      });
+      return next;
+    });
+  }, [generationIndex]);
+
+  const selectedGenerations = useMemo(
+    () =>
+      Array.from(selectedIds)
+        .map((id) => generationIndex.get(id))
+        .filter((generation): generation is Generation => !!generation),
+    [generationIndex, selectedIds],
+  );
+
+  const handleBulkUnassign = useCallback(async () => {
+    if (selectedGenerations.length === 0) return;
+    setBulkBusy(true);
+    try {
+      const failures: string[] = [];
+      await runConcurrentBatches(
+        selectedGenerations,
+        async (generation) => {
+          const res = await fetch(`/api/generations/${generation.id}/unassign`, {
+            method: "POST",
+          });
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            failures.push(
+              `${generation.display_name}: ${data.error || res.statusText}`,
+            );
+          }
+        },
+        8,
+      );
+      if (failures.length > 0) {
+        setError(
+          `${failures.length} of ${selectedGenerations.length} failed: ${failures.slice(0, 2).join("; ")}`,
+        );
+      }
+      setSelectedIds(new Set());
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unassign failed");
+    } finally {
+      setBulkBusy(false);
+    }
+  }, [router, selectedGenerations]);
+
   return (
     <div className="space-y-3">
       {error && (
@@ -465,8 +701,6 @@ export function AssignTables({
               type="button"
               onClick={() => {
                 setSelectedAccountLabel(acc.label);
-                setAssignedPage(1);
-                setWastedPage(1);
               }}
               className={`text-xs px-2 py-0.5 rounded transition-colors ${
                 selectedAccountLabel === acc.label
@@ -502,104 +736,17 @@ export function AssignTables({
               <p>Nothing assigned to {clientName} yet.</p>
             </div>
           ) : (
-            <div className="flex flex-col overflow-hidden">
-              <div className="flex-1 overflow-auto">
-                <table className="w-full text-xs">
-                  <tbody className="divide-y divide-neutral-800">
-                    {groupedAssigned.map((group) => (
-                      <Fragment key={group.label}>
-                        <tr className="bg-neutral-950/95">
-                          <td
-                            colSpan={readOnly ? 3 : 4}
-                            className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400"
-                          >
-                            {group.label}
-                          </td>
-                        </tr>
-                        {group.items.map((g) => (
-                          <tr
-                            key={g.id}
-                            className={
-                              g.work_id === workId ? "bg-lime-950/20" : ""
-                            }
-                          >
-                            <td className="px-2 py-2">
-                              <a
-                                href={hfAssetUrl(g.external_id)}
-                                target="_blank"
-                                rel="noreferrer"
-                                title="Open in Higgsfield"
-                                className="inline-block"
-                              >
-                                <MediaPreview
-                                  url={g.result_url}
-                                  mediaType={g.media_type}
-                                  name={g.display_name}
-                                />
-                              </a>
-                            </td>
-                            <td className="px-2 py-2">
-                              <a
-                                href={hfAssetUrl(g.external_id)}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="font-medium text-white hover:text-lime-300 hover:underline"
-                                title="Open in Higgsfield"
-                              >
-                                {g.display_name}
-                              </a>
-                              <div className="text-neutral-500 text-xs mt-0.5 space-y-0.5">
-                                {renderReworkTag(g.work_id) && (
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    {renderReworkTag(g.work_id)}
-                                  </div>
-                                )}
-                                {g.hf_connection_label && (
-                                  <div className="text-neutral-500 text-xs">
-                                    from{" "}
-                                    <span className="text-lime-400">
-                                      {g.hf_connection_label}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-2 py-2 text-right">
-                              <span
-                                className={`font-bold ${parseFloat(g.credits) > 0 ? "text-orange-400" : "text-neutral-500"}`}
-                              >
-                                {parseFloat(g.credits) > 0
-                                  ? parseFloat(g.credits).toFixed(1)
-                                  : "free"}
-                              </span>
-                            </td>
-                            {!readOnly && (
-                              <td className="px-2 py-2">
-                                <UnassignButton
-                                  generationId={g.id}
-                                  assignedAt={g.assigned_at}
-                                  assignedBy={g.assigned_by}
-                                  userRole={userRole}
-                                  userId={userId}
-                                  onDone={() => router.refresh()}
-                                  onError={(msg) => setError(msg)}
-                                />
-                              </td>
-                            )}
-                          </tr>
-                        ))}
-                      </Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <PaginationButtons
-                page={aPag.page}
-                totalPages={aPag.totalPages}
-                total={aPag.total}
-                onPageChange={setAssignedPage}
-              />
-            </div>
+            <PreviewGridSection
+              title={`Assigned to ${clientName}`}
+              total={assignedUseful.length}
+              groups={groupedAssigned}
+              selectedIds={selectedIds}
+              onToggle={toggleSelection}
+              onToggleDay={toggleSelectionGroup}
+              selectableKey={canSelectGeneration}
+              sectionClassName="px-4 py-3"
+              gridClassName="grid grid-cols-2 gap-1.5 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-[repeat(10,minmax(0,1fr))]"
+            />
           )}
         </div>
 
@@ -631,106 +778,17 @@ export function AssignTables({
               <p>No wastage yet.</p>
             </div>
           ) : (
-            <div className="flex flex-col overflow-hidden">
-              <div className="flex-1 overflow-auto">
-                <table className="w-full text-xs">
-                  <tbody className="divide-y divide-neutral-800">
-                    {groupedWasted.map((group) => (
-                      <Fragment key={group.label}>
-                        <tr className="bg-neutral-950/95">
-                          <td
-                            colSpan={readOnly ? 3 : 4}
-                            className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-400"
-                          >
-                            {group.label}
-                          </td>
-                        </tr>
-                        {group.items.map((g) => (
-                          <tr
-                            key={g.id}
-                            className="bg-red-950/10 hover:bg-red-950/20"
-                          >
-                            <td className="px-2 py-2">
-                              <a
-                                href={hfAssetUrl(g.external_id)}
-                                target="_blank"
-                                rel="noreferrer"
-                                title="Open in Higgsfield"
-                                className="inline-block"
-                              >
-                                <MediaPreview
-                                  url={g.result_url}
-                                  mediaType={g.media_type}
-                                  name={g.display_name}
-                                />
-                              </a>
-                            </td>
-                            <td className="px-2 py-2">
-                              <a
-                                href={hfAssetUrl(g.external_id)}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="font-medium text-neutral-400 line-through hover:text-lime-300 hover:underline"
-                                title="Open in Higgsfield"
-                              >
-                                {g.display_name}
-                              </a>
-                              <div className="text-xs text-neutral-600 mt-0.5 space-y-0.5">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <span>
-                                    Marked{" "}
-                                    {g.wasted_at
-                                      ? new Date(
-                                          g.wasted_at,
-                                        ).toLocaleTimeString()
-                                      : ""}
-                                  </span>
-                                  {renderReworkTag(g.work_id)}
-                                </div>
-                                {g.hf_connection_label && (
-                                  <div className="text-neutral-600">
-                                    from{" "}
-                                    <span className="text-red-400">
-                                      {g.hf_connection_label}
-                                    </span>
-                                  </div>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-2 py-2 text-right">
-                              <span className="font-bold text-red-400">
-                                {parseFloat(g.credits) > 0
-                                  ? parseFloat(g.credits).toFixed(1)
-                                  : "free"}
-                              </span>
-                            </td>
-                            {!readOnly && (
-                              <td className="px-2 py-2">
-                                <WastageButton
-                                  generationId={g.id}
-                                  wastedAt={g.wasted_at}
-                                  wastedBy={g.wasted_by}
-                                  userRole={userRole}
-                                  userId={userId}
-                                  onDone={() => router.refresh()}
-                                  onError={(msg) => setError(msg)}
-                                />
-                              </td>
-                            )}
-                          </tr>
-                        ))}
-                      </Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <PaginationButtons
-                page={wPag.page}
-                totalPages={wPag.totalPages}
-                total={wPag.total}
-                onPageChange={setWastedPage}
-              />
-            </div>
+            <PreviewGridSection
+              title="Wastage"
+              total={wasted.length}
+              groups={groupedWasted}
+              selectedIds={selectedIds}
+              onToggle={toggleSelection}
+              onToggleDay={toggleSelectionGroup}
+              selectableKey={canSelectGeneration}
+              sectionClassName="px-4 py-3"
+              gridClassName="grid grid-cols-2 gap-1.5 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-[repeat(10,minmax(0,1fr))]"
+            />
           )}
         </div>
       </div>
@@ -754,46 +812,34 @@ export function AssignTables({
             </p>
           </div>
           <div className="overflow-auto max-h-44">
-            <table className="w-full text-xs">
-              <tbody className="divide-y divide-neutral-800/30">
-                {groupedIrrelevant.map((group) => (
-                  <Fragment key={group.label}>
-                    <tr className="bg-neutral-950/95 opacity-100">
-                      <td
-                        colSpan={4}
-                        className="px-2 py-2 text-[10px] font-semibold uppercase tracking-wider text-neutral-500"
-                      >
-                        {group.label}
-                      </td>
-                    </tr>
-                    {group.items.map((g) => (
-                      <tr key={g.id} className="opacity-40">
-                        <td className="px-2 py-1.5">
-                          <MediaPreview
-                            url={g.result_url}
-                            mediaType={g.media_type}
-                            name={g.display_name}
-                          />
-                        </td>
-                        <td className="px-2 py-1.5 text-neutral-500">
-                          {g.display_name}
-                        </td>
-                        {g.hf_connection_label && (
-                          <td className="px-2 py-1.5 text-neutral-600 text-[11px]">
-                            {g.hf_connection_label}
-                          </td>
-                        )}
-                        <td className="px-2 py-1.5 text-right text-neutral-600">
-                          {parseFloat(g.credits) > 0
-                            ? parseFloat(g.credits).toFixed(1)
-                            : "free"}
-                        </td>
-                      </tr>
-                    ))}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
+            <PreviewGridSection
+              title="R&D"
+              total={allIrrelevant.length}
+              groups={groupedIrrelevant}
+              selectedIds={selectedIds}
+              onToggle={toggleSelection}
+              onToggleDay={toggleSelectionGroup}
+              selectableKey={canSelectGeneration}
+              sectionClassName="px-4 py-3"
+              gridClassName="grid grid-cols-2 gap-1.5 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-[repeat(10,minmax(0,1fr))]"
+            />
+          </div>
+        </div>
+      )}
+
+      {selectedGenerations.length > 0 && !readOnly && (
+        <div className="fixed inset-x-0 bottom-5 z-[80] flex justify-center px-4 pointer-events-none">
+          <div className="pointer-events-auto flex items-center gap-3 rounded-2xl border border-neutral-800 bg-neutral-950/95 px-4 py-3 shadow-[0_18px_60px_rgba(0,0,0,0.5)] backdrop-blur-lg">
+            <div className="text-sm text-white">
+              {selectedGenerations.length} selected
+            </div>
+            <Button
+              onClick={handleBulkUnassign}
+              disabled={bulkBusy}
+              className="bg-lime-400 hover:bg-lime-300 text-black font-semibold"
+            >
+              {bulkBusy ? "Unassigning…" : "Unassign"}
+            </Button>
           </div>
         </div>
       )}

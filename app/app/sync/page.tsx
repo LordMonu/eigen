@@ -5,7 +5,7 @@ import {
   useState,
   useEffect,
   useCallback,
-  useTransition,
+  useMemo,
 } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-browser";
@@ -23,6 +23,7 @@ import {
   UnassignButton,
   WastageButton,
 } from "@/components/app/works/[id]/assign-tables";
+import { UnassignedGenerationsGrid } from "@/components/app/sync/unassigned-generations-grid";
 import { ClientFormDialog } from "@/components/app/clients/client-form-dialog";
 import { CreateWorkDialog } from "@/components/app/works/create-work-dialog";
 import { PaginationButtons } from "@/components/ui/pagination-buttons";
@@ -33,7 +34,7 @@ import {
   type SyncStats,
   type SyncTab,
 } from "@/lib/sync-generation-queries";
-import { Check, RefreshCw } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import {
   isCooldownActive,
   markSynced,
@@ -41,6 +42,7 @@ import {
 } from "@/lib/sync-cooldown";
 import type { Role } from "@/lib/roles";
 import { isManagerLikeRole } from "@/lib/roles";
+import { runConcurrentBatches } from "@/lib/run-concurrent-batches";
 
 interface Client {
   id: string;
@@ -83,7 +85,7 @@ interface AccessibleAccount {
   hf_email: string | null;
 }
 
-const UNASSIGNED_BATCH_SIZE = 80;
+const UNASSIGNED_BATCH_SIZE = 50;
 
 type DayGroup<T> = { label: string; items: T[] };
 
@@ -163,11 +165,11 @@ export default function SyncPage() {
   const [wastedPage, setWastedPage] = useState(1);
   const [irrelevantPage, setIrrelevantPage] = useState(1);
 
-  const [, startTransition] = useTransition();
   const [supabase] = useState(() => createClient());
 
-  const selectedAccount = accessibleAccounts.find(
-    (a) => a.id === selectedAccountId,
+  const selectedAccount = useMemo(
+    () => accessibleAccounts.find((a) => a.id === selectedAccountId),
+    [accessibleAccounts, selectedAccountId],
   );
 
   useEffect(() => {
@@ -245,7 +247,11 @@ export default function SyncPage() {
     async (
       tab: SyncTab,
       page: number,
-      options: { append?: boolean; pageSize?: number } = {},
+      options: {
+        append?: boolean;
+        pageSize?: number;
+        includeCount?: boolean;
+      } = {},
     ) => {
       const append = options.append === true;
       const pageSize = options.pageSize ?? UNASSIGNED_BATCH_SIZE;
@@ -257,7 +263,7 @@ export default function SyncPage() {
         label,
         tab === "unassigned"
           ? {
-              count: "exact",
+              count: (options.includeCount ?? !append) ? "exact" : undefined,
               excludeFeatures: true,
               pageSize,
             }
@@ -273,6 +279,8 @@ export default function SyncPage() {
           if (count != null) {
             setUnassignedVisibleTotal(count);
             setHasMoreUnassigned(page * pageSize < count);
+          } else {
+            setHasMoreUnassigned(data.length === pageSize);
           }
           break;
         case "assigned":
@@ -294,30 +302,49 @@ export default function SyncPage() {
     if (next) setStats(next);
   }, [supabase, selectedAccount?.label]);
 
-  const refreshData = useCallback(async () => {
+  const refreshVisibleUnassigned = useCallback(
+    async (includeCount = true) => {
+      await loadTab("unassigned", 1, {
+        pageSize: UNASSIGNED_BATCH_SIZE * unassignedPage,
+        includeCount,
+      });
+    },
+    [loadTab, unassignedPage],
+  );
+
+  const refreshAfterSync = useCallback(async () => {
+    await Promise.all([loadStats(), refreshVisibleUnassigned(true)]);
+  }, [loadStats, refreshVisibleUnassigned]);
+
+  const refreshAssignedTab = useCallback(async () => {
     await Promise.all([
       loadStats(),
-      loadTab("unassigned", 1, {
-        pageSize: UNASSIGNED_BATCH_SIZE * unassignedPage,
-      }),
+      refreshVisibleUnassigned(true),
       loadTab("assigned", assignedPage),
+    ]);
+  }, [assignedPage, loadStats, loadTab, refreshVisibleUnassigned]);
+
+  const refreshWastedTab = useCallback(async () => {
+    await Promise.all([
+      loadStats(),
+      refreshVisibleUnassigned(true),
       loadTab("wasted", wastedPage),
+    ]);
+  }, [loadStats, loadTab, refreshVisibleUnassigned, wastedPage]);
+
+  const refreshIrrelevantTab = useCallback(async () => {
+    await Promise.all([
+      loadStats(),
+      refreshVisibleUnassigned(true),
       loadTab("irrelevant", irrelevantPage),
     ]);
-  }, [
-    loadStats,
-    loadTab,
-    unassignedPage,
-    assignedPage,
-    wastedPage,
-    irrelevantPage,
-  ]);
+  }, [irrelevantPage, loadStats, loadTab, refreshVisibleUnassigned]);
 
   const loadInitialData = useCallback(async () => {
     setHasMoreUnassigned(false);
     await Promise.all([
       loadStats(),
-      loadTab("unassigned", 1),
+      loadTab("unassigned", 1, { includeCount: true }),
       loadTab("assigned", 1),
       loadTab("wasted", 1),
       loadTab("irrelevant", 1),
@@ -337,7 +364,8 @@ export default function SyncPage() {
 
   useEffect(() => {
     if (selectedAccountId) {
-      resetUnassignedSelection();
+      setSelectedUnassignedIds(new Set());
+      setRangeAnchorId(null);
       void loadInitialData();
     }
   }, [selectedAccountId, loadInitialData]);
@@ -372,7 +400,7 @@ export default function SyncPage() {
       if (!res.ok) throw new Error(data.error || "Sync failed");
       markSynced(selectedAccountId);
       setSyncMessage(data.message);
-      await refreshData();
+      await refreshAfterSync();
     } catch (err) {
       setSyncError(err instanceof Error ? err.message : "Sync failed");
     } finally {
@@ -383,31 +411,31 @@ export default function SyncPage() {
   async function handleSync() {
     if (!selectedAccountId) return;
     if (isCooldownActive(selectedAccountId)) {
-      await refreshData();
+      await refreshAfterSync();
       return;
     }
     await syncSelectedAccount();
   }
 
-  function worksFor(clientFilter: string): Work[] {
+  const worksFor = useCallback((clientFilter: string): Work[] => {
     return clientFilter
       ? works.filter((w) => w.client_id === clientFilter)
       : works;
-  }
+  }, [works]);
 
-  function openCreateWorkShortcut() {
+  const openCreateWorkShortcut = useCallback(() => {
     if (!bulkClientId) {
       setRowError("Pick a client first, then add a new work for it.");
       return;
     }
     setWorkDialogOpen(true);
-  }
+  }, [bulkClientId]);
 
-  function handleQuickWorkCreated(work: {
+  const handleQuickWorkCreated = useCallback((work: {
     id: string;
     title: string | null;
     clientId: string;
-  }) {
+  }) => {
     setWorks((prev) => [
       {
         id: work.id,
@@ -420,23 +448,26 @@ export default function SyncPage() {
     ]);
     setBulkClientId(work.clientId);
     setBulkWorkId(work.id);
-  }
+  }, []);
 
-  function resetUnassignedSelection() {
+  const resetUnassignedSelection = useCallback(() => {
     setSelectedUnassignedIds(new Set());
     setRangeAnchorId(null);
-  }
+  }, []);
 
-  function loadMoreUnassignedRows() {
+  const loadMoreUnassignedRows = useCallback(() => {
     const nextPage = unassignedPage + 1;
     setLoadingMoreUnassigned(true);
     setUnassignedPage(nextPage);
-    void loadTab("unassigned", nextPage, { append: true }).finally(() => {
+    void loadTab("unassigned", nextPage, {
+      append: true,
+      includeCount: false,
+    }).finally(() => {
       setLoadingMoreUnassigned(false);
     });
-  }
+  }, [loadTab, unassignedPage]);
 
-  function toggleUnassignedDay(items: Generation[]) {
+  const toggleUnassignedDay = useCallback((items: Array<{ id: string }>) => {
     setSelectedUnassignedIds((prev) => {
       const next = new Set(prev);
       const allSelected = items.every((g) => next.has(g.id));
@@ -446,15 +477,22 @@ export default function SyncPage() {
       });
       return next;
     });
-  }
+  }, []);
 
-  function toggleUnassignedSelection(id: string) {
-    const orderedIds = visibleUnassigned.map((g) => g.id);
+  const orderedUnassignedIds = useMemo(
+    () =>
+      unassigned
+        .filter((generation) => generation.media_type !== "feature")
+        .map((generation) => generation.id),
+    [unassigned],
+  );
+
+  const toggleUnassignedSelection = useCallback((id: string) => {
     setSelectedUnassignedIds((prev) => {
       const next = new Set(prev);
-      const currentIndex = orderedIds.indexOf(id);
+      const currentIndex = orderedUnassignedIds.indexOf(id);
       const anchorIndex = rangeAnchorId
-        ? orderedIds.indexOf(rangeAnchorId)
+        ? orderedUnassignedIds.indexOf(rangeAnchorId)
         : -1;
 
       if (
@@ -467,7 +505,9 @@ export default function SyncPage() {
           anchorIndex < currentIndex
             ? [anchorIndex, currentIndex]
             : [currentIndex, anchorIndex];
-        for (let i = start; i <= end; i++) next.add(orderedIds[i]);
+        for (let i = start; i <= end; i++) {
+          next.add(orderedUnassignedIds[i]);
+        }
       } else if (next.has(id)) {
         next.delete(id);
       } else {
@@ -477,7 +517,7 @@ export default function SyncPage() {
       return next;
     });
     setRangeAnchorId(id);
-  }
+  }, [orderedUnassignedIds, rangeAnchorId]);
 
   async function handleBulkAction(mode: "assign" | "waste" | "irrelevant") {
     setRowError(null);
@@ -495,22 +535,33 @@ export default function SyncPage() {
 
     if (mode === "irrelevant") {
       try {
-        for (const gen of selectedGenerations) {
-          const res = await fetch(`/api/generations/${gen.id}/irrelevant`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ is_irrelevant: true }),
-          });
-          if (!res.ok) {
-            const d = await res.json().catch(() => ({}));
-            setRowError(`Failed: ${d?.error || res.statusText}`);
-            return;
-          }
-        }
-        startTransition(() => {
-          void refreshData();
-        });
+        const failures: string[] = [];
+        await runConcurrentBatches(
+          selectedGenerations,
+          async (gen) => {
+            const res = await fetch(`/api/generations/${gen.id}/irrelevant`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ is_irrelevant: true }),
+            });
+            if (!res.ok) {
+              const d = await res.json().catch(() => ({}));
+              failures.push(
+                `${gen.display_name}: ${d?.error || res.statusText}`,
+              );
+            }
+          },
+          8,
+        );
+
+        await refreshIrrelevantTab();
         resetUnassignedSelection();
+
+        if (failures.length > 0) {
+          setRowError(
+            `${failures.length} of ${selectedGenerations.length} failed: ${failures.slice(0, 2).join("; ")}`,
+          );
+          }
       } catch (err) {
         setRowError(err instanceof Error ? err.message : "Action failed");
       } finally {
@@ -532,42 +583,58 @@ export default function SyncPage() {
     }
 
     try {
-      for (const gen of selectedGenerations) {
-        const assignRes = await fetch(
-          `/api/works/${work.id}/assign-generation`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              generationId: gen.id,
-              clientId: work.client_id,
-            }),
-          },
-        );
-        if (!assignRes.ok) {
-          const d = await assignRes.json().catch(() => ({}));
-          setRowError(`Assign failed: ${d?.error || assignRes.statusText}`);
-          return;
-        }
-
-        if (mode === "waste") {
-          const wasteRes = await fetch(`/api/generations/${gen.id}/waste`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ is_waste: true }),
-          });
-          if (!wasteRes.ok) {
-            const d = await wasteRes.json().catch(() => ({}));
-            setRowError(`Wastage failed: ${d?.error || wasteRes.statusText}`);
+      const failures: string[] = [];
+      await runConcurrentBatches(
+        selectedGenerations,
+        async (gen) => {
+          const assignRes = await fetch(
+            `/api/works/${work.id}/assign-generation`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                generationId: gen.id,
+                clientId: work.client_id,
+              }),
+            },
+          );
+          if (!assignRes.ok) {
+            const d = await assignRes.json().catch(() => ({}));
+            failures.push(
+              `${gen.display_name}: ${d?.error || assignRes.statusText}`,
+            );
             return;
           }
-        }
-      }
 
-      startTransition(() => {
-        void refreshData();
-      });
+          if (mode === "waste") {
+            const wasteRes = await fetch(`/api/generations/${gen.id}/waste`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ is_waste: true }),
+            });
+            if (!wasteRes.ok) {
+              const d = await wasteRes.json().catch(() => ({}));
+              failures.push(
+                `${gen.display_name}: ${d?.error || wasteRes.statusText}`,
+              );
+            }
+          }
+        },
+        8,
+      );
+
+      if (mode === "assign") {
+        await refreshAssignedTab();
+      } else {
+        await refreshWastedTab();
+      }
       resetUnassignedSelection();
+
+      if (failures.length > 0) {
+        setRowError(
+          `${failures.length} of ${selectedGenerations.length} failed: ${failures.slice(0, 2).join("; ")}`,
+        );
+      }
     } catch (err) {
       setRowError(err instanceof Error ? err.message : "Action failed");
     } finally {
@@ -589,9 +656,7 @@ export default function SyncPage() {
         setRowError(`Failed: ${d?.error || res.statusText}`);
         return;
       }
-      startTransition(() => {
-        void refreshData();
-      });
+      await refreshIrrelevantTab();
     } catch (err) {
       setRowError(err instanceof Error ? err.message : "Action failed");
     } finally {
@@ -609,38 +674,72 @@ export default function SyncPage() {
   const wastedTotal = stats?.wasted_count ?? 0;
   const irrelevantTotal = stats?.irrelevant_count ?? 0;
 
-  const clientNameMap: Record<string, string> = {};
-  clients.forEach((c) => {
-    clientNameMap[c.id] = c.name;
-  });
-  const workTitle = (w: Work) => w.title || w.video_type || "Untitled";
-  const selectedBulkWork = works.find((w) => w.id === bulkWorkId) ?? null;
-  const visibleUnassigned = unassigned.filter(
-    (g) => g.media_type !== "feature",
-  );
-  const visibleAssigned = assigned.filter((g) => g.media_type !== "feature");
-  const visibleWasted = wasted.filter((g) => g.media_type !== "feature");
-  const visibleIrrelevant = irrelevant.filter(
-    (g) => g.media_type !== "feature",
-  );
-
-  const groupedUnassigned = groupByDay(visibleUnassigned);
-  const groupedAssigned = groupByDay(visibleAssigned);
-  const groupedWasted = groupByDay(visibleWasted);
-  const groupedIrrelevant = groupByDay(visibleIrrelevant);
-
-  function refresh() {
-    startTransition(() => {
-      void refreshData();
+  const clientNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    clients.forEach((client) => {
+      map[client.id] = client.name;
     });
-  }
+    return map;
+  }, [clients]);
+  const workTitle = useCallback(
+    (work: Work) => work.title || work.video_type || "Untitled",
+    [],
+  );
+  const worksById = useMemo(() => {
+    const map = new Map<string, Work>();
+    works.forEach((work) => {
+      map.set(work.id, work);
+    });
+    return map;
+  }, [works]);
+  const selectedBulkWork = useMemo(
+    () => worksById.get(bulkWorkId) ?? null,
+    [bulkWorkId, worksById],
+  );
+  const visibleUnassigned = useMemo(
+    () => unassigned.filter((g) => g.media_type !== "feature"),
+    [unassigned],
+  );
+  const visibleAssigned = useMemo(
+    () => assigned.filter((g) => g.media_type !== "feature"),
+    [assigned],
+  );
+  const visibleWasted = useMemo(
+    () => wasted.filter((g) => g.media_type !== "feature"),
+    [wasted],
+  );
+  const visibleIrrelevant = useMemo(
+    () => irrelevant.filter((g) => g.media_type !== "feature"),
+    [irrelevant],
+  );
+
+  const groupedUnassigned = useMemo(
+    () => groupByDay(visibleUnassigned),
+    [visibleUnassigned],
+  );
+  const groupedAssigned = useMemo(
+    () => groupByDay(visibleAssigned),
+    [visibleAssigned],
+  );
+  const groupedWasted = useMemo(
+    () => groupByDay(visibleWasted),
+    [visibleWasted],
+  );
+  const groupedIrrelevant = useMemo(
+    () => groupByDay(visibleIrrelevant),
+    [visibleIrrelevant],
+  );
+
+  const refreshAssignedAfterUnassign = useCallback(() => {
+    void refreshAssignedTab();
+  }, [refreshAssignedTab]);
+
+  const refreshWastedAfterUnassign = useCallback(() => {
+    void refreshWastedTab();
+  }, [refreshWastedTab]);
 
   function changeTabPage(tab: SyncTab, page: number) {
     switch (tab) {
-      case "unassigned":
-        setUnassignedPage(page);
-        resetUnassignedSelection();
-        break;
       case "assigned":
         setAssignedPage(page);
         break;
@@ -654,7 +753,10 @@ export default function SyncPage() {
     void loadTab(tab, page);
   }
 
-  const selectedBulkClient = clients.find((c) => c.id === bulkClientId) ?? null;
+  const selectedBulkClient = useMemo(
+    () => clients.find((client) => client.id === bulkClientId) ?? null,
+    [bulkClientId, clients],
+  );
 
   return (
     <div className="p-6 space-y-6 text-neutral-100">
@@ -807,9 +909,6 @@ export default function SyncPage() {
                     type="button"
                     onClick={() => {
                       setSelectedAccountId(acc.id);
-                      setUnassignedPage(1);
-                      setHasMoreUnassigned(false);
-                      void loadTab("unassigned", 1);
                     }}
                     className={`text-[10px] px-1 py-0.5 rounded transition-colors ${
                       selectedAccountId === acc.id
@@ -830,7 +929,7 @@ export default function SyncPage() {
                         "Full re-sync re-walks the ENTIRE Higgsfield history for this account to rebuild credit totals. It can take a minute. Continue?",
                       )
                     ) {
-                      syncSelectedAccount(true, true);
+                      void syncSelectedAccount(true, true);
                     }
                   }}
                   disabled={syncing}
@@ -863,79 +962,14 @@ export default function SyncPage() {
         ) : (
           <div className="flex flex-col overflow-hidden max-h-[90vh]">
             <div className="flex-1 overflow-auto">
-              <div className="divide-y divide-neutral-800">
-                {groupedUnassigned.map((group) => {
-                  const daySelected =
-                    group.items.length > 0 &&
-                    group.items.every((g) => selectedUnassignedIds.has(g.id));
-                  return (
-                    <section key={group.label} className="px-4 py-2">
-                      <button
-                        type="button"
-                        onClick={() => toggleUnassignedDay(group.items)}
-                        className="mb-4 flex items-center gap-2 text-sm font-semibold text-white transition hover:text-lime-300"
-                      >
-                        <span
-                          className={`flex size-5 items-center justify-center rounded border-2 transition ${
-                            daySelected
-                              ? "border-lime-400 bg-lime-400 text-black"
-                              : "border-neutral-600 bg-transparent text-transparent"
-                          }`}
-                        >
-                          <Check className="size-3" />
-                        </span>
-                        <span>{group.label}</span>
-                      </button>
-                      <div className="grid grid-cols-2 gap-2 md:grid-cols-5 xl:grid-cols-14 2xl:grid-cols-16">
-                        {group.items.map((gen) => {
-                          const checked = selectedUnassignedIds.has(gen.id);
-                          return (
-                            <a
-                              key={gen.id}
-                              href={hfAssetUrl(gen.external_id)}
-                              target="_blank"
-                              rel="noreferrer"
-                              title="Open in Higgsfield"
-                              className={`group relative block aspect-square overflow-hidden rounded-xl xl:rounded-2xl border bg-neutral-950 transition ${
-                                checked
-                                  ? "border-lime-400 shadow-[0_0_0_1px_rgba(163,230,53,0.45)]"
-                                  : "border-neutral-800 hover:border-neutral-600"
-                              }`}
-                            >
-                              <button
-                                type="button"
-                                aria-pressed={checked}
-                                aria-label={
-                                  checked
-                                    ? `Deselect ${gen.display_name}`
-                                    : `Select ${gen.display_name}`
-                                }
-                                onClick={(e) => {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  toggleUnassignedSelection(gen.id);
-                                }}
-                                className={`absolute left-3 top-3 z-10 flex size-8 items-center justify-center rounded-lg border-2 backdrop-blur-sm transition ${
-                                  checked
-                                    ? "border-lime-400 bg-lime-400 text-black"
-                                    : "border-white/25 bg-black/35 text-transparent hover:border-white/45"
-                                }`}
-                              >
-                                <Check className="size-4" />
-                              </button>
-                              <MediaPreview
-                                url={gen.result_url}
-                                mediaType={gen.media_type}
-                                name={gen.display_name}
-                              />
-                            </a>
-                          );
-                        })}
-                      </div>
-                    </section>
-                  );
-                })}
-              </div>
+              <UnassignedGenerationsGrid
+                groups={groupedUnassigned}
+                selectedIds={selectedUnassignedIds}
+                onToggleDay={toggleUnassignedDay}
+                onToggle={toggleUnassignedSelection}
+                sectionClassName="px-4 py-2"
+                gridClassName="grid grid-cols-2 gap-2 md:grid-cols-5 xl:grid-cols-10 2xl:grid-cols-12"
+              />
             </div>
             {hasMoreUnassigned && (
               <div className="flex items-center justify-center gap-2 border-t border-neutral-800 px-4 py-2">
@@ -1026,7 +1060,7 @@ export default function SyncPage() {
                         if (!val || val === "__create_work__") {
                           return "Pick a work…";
                         }
-                        const work = works.find((w) => w.id === val);
+                        const work = worksById.get(val);
                         return work
                           ? workTitle(work)
                           : selectedBulkWork
@@ -1157,9 +1191,9 @@ export default function SyncPage() {
                               <div className="text-neutral-500 text-xs mt-0.5 space-y-0.5">
                                 {g.work_id &&
                                   (() => {
-                                    const w = works.find(
-                                      (x) => x.id === g.work_id,
-                                    );
+                                    const w = g.work_id
+                                      ? worksById.get(g.work_id)
+                                      : null;
                                     if (!w) return null;
                                     return (
                                       <div>
@@ -1217,7 +1251,7 @@ export default function SyncPage() {
                                 assignedBy={g.assigned_by}
                                 userRole={userRole}
                                 userId={userId}
-                                onDone={refresh}
+                                onDone={refreshAssignedAfterUnassign}
                                 onError={(msg) => setRowError(msg)}
                               />
                             </td>
@@ -1321,9 +1355,9 @@ export default function SyncPage() {
                                 </div>
                                 {g.work_id &&
                                   (() => {
-                                    const w = works.find(
-                                      (x) => x.id === g.work_id,
-                                    );
+                                    const w = g.work_id
+                                      ? worksById.get(g.work_id)
+                                      : null;
                                     if (!w) return null;
                                     return (
                                       <div>
@@ -1361,7 +1395,7 @@ export default function SyncPage() {
                                 wastedBy={g.wasted_by}
                                 userRole={userRole}
                                 userId={userId}
-                                onDone={refresh}
+                                onDone={refreshWastedAfterUnassign}
                                 onError={(msg) => setRowError(msg)}
                               />
                             </td>

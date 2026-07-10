@@ -149,6 +149,7 @@ export function ClientGenerationsTables({
                                 via{" "}
                                 <Link
                                   href={`/app/works/${g.work_id}`}
+                                  prefetch={false}
                                   className="text-lime-400 hover:underline"
                                 >
                                   {workTitles[g.work_id]}
