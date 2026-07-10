@@ -83,7 +83,7 @@ interface AccessibleAccount {
   hf_email: string | null;
 }
 
-const UNASSIGNED_BATCH_SIZE = 50;
+const UNASSIGNED_BATCH_SIZE = 80;
 
 type DayGroup<T> = { label: string; items: T[] };
 
@@ -938,13 +938,13 @@ export default function SyncPage() {
               </div>
             </div>
             {hasMoreUnassigned && (
-              <div className="flex flex-col items-center justify-center gap-2 border-t border-neutral-800 px-4 py-3">
+              <div className="flex items-center justify-center gap-2 border-t border-neutral-800 px-4 py-2">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={loadMoreUnassignedRows}
                   disabled={loadingMoreUnassigned}
-                  className="h-8 min-w-32 text-xs"
+                  className="h-8 min-w-28 text-xs"
                 >
                   {loadingMoreUnassigned ? (
                     <>
@@ -955,7 +955,7 @@ export default function SyncPage() {
                     "Load more"
                   )}
                 </Button>
-                <span className="text-xs text-neutral-500">
+                <span className="text-sm text-neutral-500">
                   Showing {visibleUnassigned.length} of {unassignedTotal}
                 </span>
               </div>

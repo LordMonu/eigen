@@ -40,7 +40,7 @@ interface Account {
   label: string;
 }
 
-const PICKER_BATCH_SIZE = 50;
+const PICKER_BATCH_SIZE = 80;
 
 type DayGroup<T> = { label: string; items: T[] };
 
@@ -203,6 +203,7 @@ export function SyncAndAssign({
   const [loadingMoreUnassigned, setLoadingMoreUnassigned] = useState(false);
   const [hasMoreUnassigned, setHasMoreUnassigned] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [rangeAnchorId, setRangeAnchorId] = useState<string | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string>(
     accounts[0]?.id || "",
   );
@@ -231,7 +232,9 @@ export function SyncAndAssign({
   );
 
   const selectedAccount = accounts.find((a) => a.id === selectedAccountId);
-  const visibleUnassigned = unassigned.filter((g) => g.media_type !== "feature");
+  const visibleUnassigned = unassigned.filter(
+    (g) => g.media_type !== "feature",
+  );
   const groupedUnassigned = groupByDay(visibleUnassigned);
 
   useEffect(() => {
@@ -393,6 +396,7 @@ export function SyncAndAssign({
       markSynced(selectedAccountId);
       setSyncMessage(data?.message || "Sync complete.");
       setSelectedIds(new Set());
+      setRangeAnchorId(null);
       setPickerPage(1);
       await loadPickerStats();
       await loadPickerPage(1, { silent: true });
@@ -412,6 +416,7 @@ export function SyncAndAssign({
     setSyncError(null);
     setSyncMessage(null);
     setSelectedIds(new Set());
+    setRangeAnchorId(null);
     setPickerPage(1);
     setPickerOpen(true);
 
@@ -423,12 +428,33 @@ export function SyncAndAssign({
   }
 
   function toggleSelect(genId: string) {
+    const orderedIds = visibleUnassigned.map((g) => g.id);
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      if (next.has(genId)) next.delete(genId);
-      else next.add(genId);
+      const currentIndex = orderedIds.indexOf(genId);
+      const anchorIndex = rangeAnchorId
+        ? orderedIds.indexOf(rangeAnchorId)
+        : -1;
+
+      if (
+        anchorIndex !== -1 &&
+        currentIndex !== -1 &&
+        genId !== rangeAnchorId &&
+        !prev.has(genId)
+      ) {
+        const [start, end] =
+          anchorIndex < currentIndex
+            ? [anchorIndex, currentIndex]
+            : [currentIndex, anchorIndex];
+        for (let i = start; i <= end; i++) next.add(orderedIds[i]);
+      } else if (next.has(genId)) {
+        next.delete(genId);
+      } else {
+        next.add(genId);
+      }
       return next;
     });
+    setRangeAnchorId(genId);
   }
 
   function toggleSelectDay(items: UnassignedGeneration[]) {
@@ -668,127 +694,115 @@ export function SyncAndAssign({
           onClick={() => !batchBusy && !isPending && setPickerOpen(false)}
         >
           <div
-            className="bg-neutral-950 border border-neutral-800 rounded-lg w-[95vw] max-w-[95vw] max-h-[90vh] flex flex-col"
+            className="bg-neutral-950 border border-neutral-800 rounded-lg w-[95vw] max-w-[95vw] max-h-[95vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             {/* STICKY HEADER */}
-            <div className="sticky top-0 z-10 bg-neutral-950 border-b border-neutral-800 px-4 py-3">
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <div>
-                  <div className="flex items-center gap-3">
-                    <h2 className="font-semibold text-white text-sm">
-                      Pick generations to attribute
-                    </h2>
-                    <span className="text-sm font-bold text-yellow-400 font-mono">
-                      {unassignedCredits.toFixed(1)} cr
+            <div className="sticky top-0 z-10 bg-neutral-950 border-b border-neutral-800 px-4 py-3 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <h2 className="font-semibold text-white text-">
+                  Pick generations
+                </h2>
+                <span className="text-sm font-bold text-yellow-400 font-mono">
+                  {unassignedCredits.toFixed(1)} cr
+                </span>
+                {/* Account filter chips + Refresh */}
+                {accounts.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 items-center">
+                    <span className="text-[8px] text-neutral-500 uppercase tracking-wider mr-1">
+                      Account:
                     </span>
-                  </div>
-                  <p className="text-xs text-neutral-500 mt-0.5">
-                    {selectedIds.size} of {unassignedTotal} selected
-                    {unassignedTotal > 0
-                      ? ` · ${unassigned.length} loaded`
-                      : ""}
-                    {selectedAccount ? ` · ${selectedAccount.label}` : ""}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setPickerOpen(false)}
-                    disabled={batchBusy !== null || isPending}
-                    className="h-8 text-xs"
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={openDestination}
-                    disabled={
-                      selectedIds.size === 0 || batchBusy !== null || isPending
-                    }
-                    className="h-8 text-xs bg-lime-400 hover:bg-lime-300 text-black font-semibold"
-                  >
-                    Assign ({selectedIds.size})
-                  </Button>
-                </div>
-              </div>
-
-              {/* Account filter chips + Refresh */}
-              {accounts.length > 0 && (
-                <div className="flex flex-wrap gap-1.5 items-center">
-                  <span className="text-[10px] text-neutral-500 uppercase tracking-wider mr-1">
-                    Account:
-                  </span>
-                  {accounts.map((acc) => (
+                    {accounts.map((acc) => (
+                      <button
+                        key={acc.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedAccountId(acc.id);
+                          setPickerPage(1);
+                          setSelectedIds(new Set());
+                          void Promise.all([
+                            loadPickerStats(),
+                            loadPickerPage(1),
+                          ]);
+                        }}
+                        className={`text-[8px] px-2 py-0.5 rounded transition-colors ${
+                          selectedAccountId === acc.id
+                            ? "bg-lime-400 text-black"
+                            : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+                        }`}
+                      >
+                        {acc.label}
+                      </button>
+                    ))}
+                    <span className="text-neutral-700 mx-1">·</span>
                     <button
-                      key={acc.id}
+                      type="button"
+                      onClick={() => syncAccount(true)}
+                      disabled={syncing}
+                      className="text-xs text-orange-400 hover:text-orange-300 disabled:text-neutral-600 flex items-center gap-1"
+                      title="Force refresh from Higgsfield (bypasses cooldown)"
+                    >
+                      <RefreshCw
+                        className={`size-3 ${syncing ? "animate-spin" : ""}`}
+                      />
+                      Refresh
+                    </button>
+                    {cooldownLeft > 0 && !syncing && (
+                      <span className="text-[10px] text-neutral-600">
+                        next sync in {Math.ceil(cooldownLeft / 60000)}m
+                      </span>
+                    )}
+                    <span className="text-neutral-700 mx-1">·</span>
+                    <button
                       type="button"
                       onClick={() => {
-                        setSelectedAccountId(acc.id);
-                        setPickerPage(1);
-                        setSelectedIds(new Set());
-                        void Promise.all([
-                          loadPickerStats(),
-                          loadPickerPage(1),
-                        ]);
+                        if (
+                          window.confirm(
+                            "Full re-sync re-walks the ENTIRE Higgsfield history for this account to rebuild credit totals. It can take a minute. Continue?",
+                          )
+                        ) {
+                          syncAccount(true, true);
+                        }
                       }}
-                      className={`text-xs px-2 py-0.5 rounded transition-colors ${
-                        selectedAccountId === acc.id
-                          ? "bg-lime-400 text-black"
-                          : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
-                      }`}
+                      disabled={syncing}
+                      className="text-xs text-neutral-400 hover:text-neutral-200 disabled:text-neutral-600"
+                      title="Re-walk all history and rebuild credit totals (slow — use once)"
                     >
-                      {acc.label}
+                      Full re-sync
                     </button>
-                  ))}
-                  <span className="text-neutral-700 mx-1">·</span>
-                  <button
-                    type="button"
-                    onClick={() => syncAccount(true)}
-                    disabled={syncing}
-                    className="text-xs text-orange-400 hover:text-orange-300 disabled:text-neutral-600 flex items-center gap-1"
-                    title="Force refresh from Higgsfield (bypasses cooldown)"
-                  >
-                    <RefreshCw
-                      className={`size-3 ${syncing ? "animate-spin" : ""}`}
-                    />
-                    Refresh
-                  </button>
-                  {cooldownLeft > 0 && !syncing && (
-                    <span className="text-[10px] text-neutral-600">
-                      next sync in {Math.ceil(cooldownLeft / 60000)}m
-                    </span>
-                  )}
-                  <span className="text-neutral-700 mx-1">·</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          "Full re-sync re-walks the ENTIRE Higgsfield history for this account to rebuild credit totals. It can take a minute. Continue?",
-                        )
-                      ) {
-                        syncAccount(true, true);
-                      }
-                    }}
-                    disabled={syncing}
-                    className="text-xs text-neutral-400 hover:text-neutral-200 disabled:text-neutral-600"
-                    title="Re-walk all history and rebuild credit totals (slow — use once)"
-                  >
-                    Full re-sync
-                  </button>
-                  <span className="text-neutral-700 mx-1">·</span>
-                  <button
-                    type="button"
-                    onClick={toggleSelectAllVisible}
-                    disabled={unassigned.length === 0}
-                    className="text-xs text-lime-400 hover:underline disabled:text-neutral-600 disabled:no-underline"
-                  >
-                    {allVisibleSelected ? "Deselect loaded" : "Select loaded"}
-                  </button>
-                </div>
-              )}
+                    <span className="text-neutral-700 mx-1">·</span>
+                    <button
+                      type="button"
+                      onClick={toggleSelectAllVisible}
+                      disabled={unassigned.length === 0}
+                      className="text-xs text-lime-400 hover:underline disabled:text-neutral-600 disabled:no-underline"
+                    >
+                      {allVisibleSelected ? "Deselect loaded" : "Select loaded"}
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPickerOpen(false)}
+                  disabled={batchBusy !== null || isPending}
+                  className="h-8 text-xs"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={openDestination}
+                  disabled={
+                    selectedIds.size === 0 || batchBusy !== null || isPending
+                  }
+                  className="h-8 text-xs bg-lime-400 hover:bg-lime-300 text-black font-semibold"
+                >
+                  Assign ({selectedIds.size})
+                </Button>
+              </div>
             </div>
 
             {/* LIST */}
@@ -880,80 +894,78 @@ export function SyncAndAssign({
                         </span>
                       </div>
                     )}
-                    <div className="divide-y divide-neutral-800">
-                      {groupedUnassigned.map((group) => {
-                        const daySelected =
-                          group.items.length > 0 &&
-                          group.items.every((g) => selectedIds.has(g.id));
-                        return (
-                          <section key={group.label} className="px-4 py-4">
-                            <button
-                              type="button"
-                              onClick={() => toggleSelectDay(group.items)}
-                              className="mb-4 flex items-center gap-2 text-sm font-semibold text-white transition hover:text-lime-300"
+                    {groupedUnassigned.map((group) => {
+                      const daySelected =
+                        group.items.length > 0 &&
+                        group.items.every((g) => selectedIds.has(g.id));
+                      return (
+                        <section key={group.label} className="px-4 py-4">
+                          <button
+                            type="button"
+                            onClick={() => toggleSelectDay(group.items)}
+                            className="mb-4 flex items-center gap-2 text-sm font-semibold text-white transition hover:text-lime-300"
+                          >
+                            <span
+                              className={`flex size-5 items-center justify-center rounded border-2 transition ${
+                                daySelected
+                                  ? "border-lime-400 bg-lime-400 text-black"
+                                  : "border-neutral-600 bg-transparent text-transparent"
+                              }`}
                             >
-                              <span
-                                className={`flex size-5 items-center justify-center rounded border-2 transition ${
-                                  daySelected
-                                    ? "border-lime-400 bg-lime-400 text-black"
-                                    : "border-neutral-600 bg-transparent text-transparent"
-                                }`}
-                              >
-                                <Check className="size-3" />
-                              </span>
-                              <span>{group.label}</span>
-                            </button>
-                            <div className="grid grid-cols-2 gap-3 md:grid-cols-5 xl:grid-cols-10">
-                              {group.items.map((g) => {
-                                const checked = selectedIds.has(g.id);
-                                return (
-                                  <a
-                                    key={g.id}
-                                    href={hfAssetUrl(g.external_id)}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    title="Open in Higgsfield"
-                                    className={`group relative block aspect-square rounded-[1.75rem] xl:rounded-4xl border bg-neutral-950 transition overflow-hidden ${
+                              <Check className="size-3" />
+                            </span>
+                            <span>{group.label}</span>
+                          </button>
+                          <div className="grid grid-cols-2 gap-1.5 md:grid-cols-6 xl:grid-cols-14 2xl:grid-cols-16">
+                            {group.items.map((g) => {
+                              const checked = selectedIds.has(g.id);
+                              return (
+                                <a
+                                  key={g.id}
+                                  href={hfAssetUrl(g.external_id)}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  title="Open in Higgsfield"
+                                  className={`group relative block aspect-square rounded-lg xl:rounded-xl border bg-neutral-950 transition overflow-hidden ${
+                                    checked
+                                      ? "border-lime-400 shadow-[0_0_0_1px_rgba(163,230,53,0.45)]"
+                                      : "border-neutral-800 hover:border-neutral-600"
+                                  }`}
+                                >
+                                  <button
+                                    type="button"
+                                    aria-pressed={checked}
+                                    aria-label={
                                       checked
-                                        ? "border-lime-400 shadow-[0_0_0_1px_rgba(163,230,53,0.45)]"
-                                        : "border-neutral-800 hover:border-neutral-600"
+                                        ? `Deselect ${g.display_name}`
+                                        : `Select ${g.display_name}`
+                                    }
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      e.stopPropagation();
+                                      toggleSelect(g.id);
+                                    }}
+                                    className={`absolute left-2.5 top-2.5 z-10 flex size-7 items-center justify-center rounded-lg border-2 backdrop-blur-sm transition ${
+                                      checked
+                                        ? "border-lime-400 bg-lime-400 text-black"
+                                        : "border-white/25 bg-black/35 text-transparent hover:border-white/45"
                                     }`}
                                   >
-                                    <button
-                                      type="button"
-                                      aria-pressed={checked}
-                                      aria-label={
-                                        checked
-                                          ? `Deselect ${g.display_name}`
-                                          : `Select ${g.display_name}`
-                                      }
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        toggleSelect(g.id);
-                                      }}
-                                      className={`absolute left-3 top-3 z-10 flex size-8 items-center justify-center rounded-xl border-2 backdrop-blur-sm transition ${
-                                        checked
-                                          ? "border-lime-400 bg-lime-400 text-black"
-                                          : "border-white/25 bg-black/35 text-transparent hover:border-white/45"
-                                      }`}
-                                    >
-                                      <Check className="size-4" />
-                                    </button>
-                                    <MediaPreview
-                                      url={g.result_url}
-                                      mediaType={g.media_type}
-                                      name={g.display_name}
-                                      className="h-full w-full object-cover"
-                                    />
-                                  </a>
-                                );
-                              })}
-                            </div>
-                          </section>
-                        );
-                      })}
-                    </div>
+                                    <Check className="size-3.5" />
+                                  </button>
+                                  <MediaPreview
+                                    url={g.result_url}
+                                    mediaType={g.media_type}
+                                    name={g.display_name}
+                                    className="h-full w-full object-cover"
+                                  />
+                                </a>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      );
+                    })}
                   </>
                 )}
               </div>
@@ -961,7 +973,10 @@ export function SyncAndAssign({
                 !loadingUnassigned &&
                 unassignedTotal > 0 &&
                 hasMoreUnassigned && (
-                  <div className="flex flex-col items-center justify-center gap-2 border-t border-neutral-800 px-4 py-3">
+                  <div className="flex items-center justify-center gap-2 border-t border-neutral-800 px-4 py-2">
+                    <p className="text-xs text-neutral-500">
+                      {selectedIds.size} of {unassignedTotal} selected
+                    </p>
                     <Button
                       type="button"
                       variant="outline"
@@ -982,7 +997,7 @@ export function SyncAndAssign({
                       Showing {unassigned.length} of {unassignedTotal}
                     </span>
                   </div>
-              )}
+                )}
             </div>
           </div>
         </div>
