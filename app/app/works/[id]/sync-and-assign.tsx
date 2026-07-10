@@ -706,7 +706,6 @@ export function SyncAndAssign({
                 <span className="text-sm font-bold text-yellow-400 font-mono">
                   {unassignedCredits.toFixed(1)} cr
                 </span>
-                {/* Account filter chips + Refresh */}
                 {accounts.length > 0 && (
                   <div className="flex flex-wrap gap-1.5 items-center">
                     <span className="text-[8px] text-neutral-500 uppercase tracking-wider mr-1">
