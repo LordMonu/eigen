@@ -100,15 +100,18 @@ export default function JoinOrgPage() {
   // Debounced search — only fires when the user has typed at least 2 chars.
   // Stale error message is cleared the moment the user starts typing again.
   useEffect(() => {
-    setError(null);
     const trimmed = query.trim();
     if (trimmed.length < 2) {
-      setResults([]);
-      setSearched(false);
-      return;
+      const handle = setTimeout(() => {
+        setError(null);
+        setResults([]);
+        setSearched(false);
+      }, 0);
+      return () => clearTimeout(handle);
     }
-    setSearching(true);
     const handle = setTimeout(async () => {
+      setError(null);
+      setSearching(true);
       const { data } = await supabase
         .from("organizations")
         .select("id, name")
@@ -125,7 +128,10 @@ export default function JoinOrgPage() {
   // If the currently-selected org no longer matches the new query, drop it.
   useEffect(() => {
     if (selected && !results.some((o) => o.id === selected.id)) {
-      setSelected(null);
+      const frame = window.requestAnimationFrame(() => {
+        setSelected(null);
+      });
+      return () => window.cancelAnimationFrame(frame);
     }
   }, [results, selected]);
 

@@ -20,12 +20,11 @@ import { ScheduleCalendar } from "@/components/app/works/[id]/schedule-calendar"
 import { WorkActions } from "@/components/app/works/[id]/work-actions";
 import { ActivityLog } from "@/components/ui/activity-log";
 
-const NIL_UUID = "00000000-0000-0000-0000-000000000000";
 // Cap on rows passed to AssignTables (which paginates client-side at 50/page).
-// 500 = 10 pages of history per work — enough for almost every real work.
+// Keep the interactive page light; aggregate RPCs below keep totals accurate.
 // Aggregates (totals + per-creator breakdown) come from RPCs so they stay
 // accurate even beyond this cap.
-const GENERATIONS_DISPLAY_LIMIT = 500;
+const GENERATIONS_DISPLAY_LIMIT = 240;
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -69,8 +68,6 @@ async function WorkDetailContent({ id }: { id: string }) {
   if (!work) notFound();
 
   // WAVE 2 — ALL remaining queries in parallel, including memberships.
-  // Fetching all org memberships (RLS-scoped) and all client works avoids
-  // a 3rd wave to resolve user IDs / work IDs derived from this wave.
   const [
     { data: client },
     { data: workCreators },
@@ -79,7 +76,6 @@ async function WorkDetailContent({ id }: { id: string }) {
     { data: creatorBreakdown },
     { data: instructionsBlob },
     { data: allMemberships },
-    { data: clientWorks },
     { data: hfConns },
     { data: activityLogEntries },
   ] = await Promise.all([
@@ -112,7 +108,6 @@ async function WorkDetailContent({ id }: { id: string }) {
           .download(work.instructions_path)
       : Promise.resolve({ data: null }),
     supabase.from("memberships").select("user_id, full_name"),
-    supabase.from("works").select("id, status").eq("client_id", work.client_id),
     supabase
       .from("hf_connections")
       .select("id, label")
@@ -141,10 +136,6 @@ async function WorkDetailContent({ id }: { id: string }) {
     name: nameMap.get(uid) || "Unknown",
     isPrimary: uid === work.creator_id,
   }));
-
-  const workStatusMap: Record<string, WorkStatus> = Object.fromEntries(
-    (clientWorks || []).map((w) => [w.id, w.status as WorkStatus]),
-  );
 
   const accounts = ((hfConns as { id: string; label: string }[]) || []).map(
     (c) => ({ id: c.id, label: c.label }),
@@ -424,7 +415,6 @@ async function WorkDetailContent({ id }: { id: string }) {
         workId={work.id}
         clientName={client?.name || ""}
         assignedToClient={(assignedToClient || []) as never}
-        workStatusMap={workStatusMap}
         userRole={membership.role}
         userId={membership.user_id}
         accounts={accounts}

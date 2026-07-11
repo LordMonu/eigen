@@ -111,11 +111,14 @@ function SidebarProvider({
 
   // Below xl: sheet overlay (closed). xl+: docked sidebar open.
   React.useEffect(() => {
-    if (isMobile) {
-      setOpenMobile(false);
-    } else {
-      setOpen(true);
-    }
+    const frame = window.requestAnimationFrame(() => {
+      if (isMobile) {
+        setOpenMobile(false);
+      } else {
+        setOpen(true);
+      }
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [isMobile, setOpen, setOpenMobile]);
 
   // We add a state so that we can do data-state="expanded" or "collapsed".

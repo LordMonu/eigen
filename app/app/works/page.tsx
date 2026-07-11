@@ -31,8 +31,6 @@ export default async function WorksPage({ searchParams }: PageProps) {
   );
 }
 
-const PLACEHOLDER = "00000000-0000-0000-0000-000000000000";
-
 interface WorkRpcRow {
   id: string;
   title: string | null;

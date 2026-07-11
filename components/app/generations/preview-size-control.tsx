@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Expand, Shrink } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -19,20 +19,20 @@ export function useGenerationPreviewSize(
   storageKey: string,
   initialValue = DEFAULT_GENERATION_PREVIEW_SIZE,
 ) {
-  const [size, setSize] = useState(initialValue);
-
-  useEffect(() => {
+  const [size, setSize] = useState(() => {
+    if (typeof window === "undefined") return initialValue;
     try {
       const raw = window.localStorage.getItem(storageKey);
-      if (!raw) return;
+      if (!raw) return initialValue;
       const parsed = Number(raw);
       if (Number.isFinite(parsed)) {
-        setSize(clampSize(parsed));
+        return clampSize(parsed);
       }
     } catch {
       // Ignore localStorage failures and fall back to the in-memory default.
     }
-  }, [storageKey]);
+    return initialValue;
+  });
 
   function updateSize(next: number) {
     const clamped = clampSize(next);

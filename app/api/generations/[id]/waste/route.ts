@@ -94,7 +94,7 @@ export async function POST(
     if (genFull?.work_id) {
       const genLabel = `${genFull.display_name} (${parseFloat(genFull.credits || '0').toFixed(2)} cr)`
       // Detect rework+wastage: fetch work status to label it correctly
-      let action: 'wastage' | 'unwastage' = is_waste ? 'wastage' : 'unwastage'
+      const action: 'wastage' | 'unwastage' = is_waste ? 'wastage' : 'unwastage'
       let toValue: string | null = null
       if (is_waste) {
         const { data: work } = await supabase.from('works').select('status').eq('id', genFull.work_id).maybeSingle()

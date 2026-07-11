@@ -3,6 +3,8 @@ import { PAGE_SIZE } from '@/components/ui/pagination-buttons'
 
 export const SYNC_GEN_COLS =
   'id, external_id, display_name, job_set_type, result_url, media_type, prompt, credits, hf_created_at, client_id, work_id, assigned_at, assigned_by, is_waste, is_irrelevant, wasted_at, wasted_by, hf_connection_label'
+export const SYNC_GEN_PREVIEW_COLS =
+  'id, external_id, display_name, result_url, media_type, credits, hf_created_at, client_id, work_id, assigned_at, assigned_by, is_waste, is_irrelevant, wasted_at, wasted_by, hf_connection_label'
 
 export type SyncTab = 'unassigned' | 'assigned' | 'wasted' | 'irrelevant'
 
@@ -21,7 +23,37 @@ export function tabTotalPages(count: number) {
   return Math.max(1, Math.ceil(count / PAGE_SIZE))
 }
 
-function applyTabFilter<T extends { is: Function; not: Function; eq: Function }>(
+type SyncFilterQuery<TSelf> = {
+  is: (column: string, value: null) => TSelf
+  not: (column: string, operator: string, value: unknown) => TSelf
+  eq: (column: string, value: unknown) => TSelf
+}
+
+interface SyncPageQuery<T>
+  extends SyncFilterQuery<SyncPageQuery<T>>,
+    PromiseLike<{
+    data: T[] | null
+    error: unknown
+    count: number | null
+  }> {
+  neq: (column: string, value: unknown) => SyncPageQuery<T>
+  order: (
+    column: string,
+    options: { ascending: boolean },
+  ) => SyncPageQuery<T>
+  range: (from: number, to: number) => SyncPageQuery<T>
+}
+
+type MinimalSupabaseSelect = {
+  from: (table: string) => {
+    select: (
+      columns: string,
+      options?: { count: 'exact' },
+    ) => unknown
+  }
+}
+
+function applyTabFilter<T extends SyncFilterQuery<T>>(
   query: T,
   tab: SyncTab,
 ): T {
@@ -44,7 +76,7 @@ function applyTabFilter<T extends { is: Function; not: Function; eq: Function }>
 }
 
 function applyAccountLabel<
-  T extends { eq: (col: string, val: string) => T },
+  T extends { eq: (column: string, value: string) => T },
 >(query: T, accountLabel?: string | null): T {
   if (accountLabel) return query.eq('hf_connection_label', accountLabel)
   return query
@@ -131,15 +163,20 @@ export async function fetchSyncTabPage<T>(
     pageSize?: number
     excludeFeatures?: boolean
     count?: 'exact'
+    previewOnly?: boolean
   },
 ) {
   const pageSize = options?.pageSize ?? PAGE_SIZE
   const from = (page - 1) * pageSize
   const to = from + pageSize - 1
 
-  let query = supabase
+  const selectOptions = options?.count ? { count: options.count } : undefined
+  let query = ((supabase as unknown as MinimalSupabaseSelect)
     .from('generations')
-    .select(SYNC_GEN_COLS, options?.count ? { count: options.count } : undefined)
+    .select(
+      options?.previewOnly ? SYNC_GEN_PREVIEW_COLS : SYNC_GEN_COLS,
+      selectOptions,
+    ) as unknown as SyncPageQuery<T>)
     .order('hf_created_at', { ascending: false })
     .order('id', { ascending: false })
     .range(from, to)

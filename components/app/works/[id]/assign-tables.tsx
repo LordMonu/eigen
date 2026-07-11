@@ -1,13 +1,13 @@
 "use client";
-import { Fragment, useState, useEffect, useMemo, useTransition, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Play, Undo2 } from "lucide-react";
-import type { WorkStatus } from "@/lib/work-helpers";
+import { Check } from "lucide-react";
 import type { Role } from "@/lib/roles";
-import { isManagerLikeRole } from "@/lib/roles";
 import { runConcurrentBatches } from "@/lib/run-concurrent-batches";
+import { MediaPreview } from "@/components/app/generations/media-preview";
+import { isUnassignAllowed } from "@/components/app/generations/action-buttons";
 import {
   DEFAULT_GENERATION_PREVIEW_SIZE,
   getGenerationCheckboxClassName,
@@ -16,10 +16,6 @@ import {
   PreviewSizeControl,
   useGenerationPreviewSize,
 } from "@/components/app/generations/preview-size-control";
-
-// Per spec: 60-second window for unassign-undo / mark-useful-undo.
-// Kept in sync with the same threshold on the unassign + waste API routes.
-const UNDO_WINDOW_MS = 60000;
 
 interface Generation {
   id: string;
@@ -43,8 +39,6 @@ interface Props {
   workId: string;
   clientName: string;
   assignedToClient: Generation[];
-  /** Map of work_id → status. Used to flag the "Rework" tag per row. */
-  workStatusMap: Record<string, WorkStatus>;
   userRole: Role;
   userId: string;
   accounts: { id: string; label: string }[];
@@ -52,6 +46,8 @@ interface Props {
 }
 
 type DayGroup<T> = { label: string; items: T[] };
+const WORK_SECTION_INITIAL_LIMIT = 80;
+const WORK_SECTION_LOAD_STEP = 80;
 
 function dayLabel(iso: string) {
   const d = new Date(iso);
@@ -82,130 +78,6 @@ function groupByDay<T extends { hf_created_at: string }>(
   return groups;
 }
 
-function isUnassignAllowed({
-  userRole,
-  userId,
-  assignedAt,
-  assignedBy,
-}: {
-  userRole: string;
-  userId: string;
-  assignedAt: string | null;
-  assignedBy: string | null;
-}) {
-  const isMasterOrManager =
-    userRole === "master" || isManagerLikeRole(userRole);
-  if (isMasterOrManager) return true;
-  if (assignedBy !== userId || !assignedAt) return false;
-  const assignedTime = new Date(assignedAt).getTime();
-  return Date.now() - assignedTime < UNDO_WINDOW_MS;
-}
-
-export function MediaPreview({
-  url,
-  mediaType,
-  name,
-  className,
-}: {
-  url: string;
-  mediaType: string;
-  name: string;
-  className?: string;
-}) {
-  const [failed, setFailed] = useState(false);
-  const looksAudio =
-    /\b(text\s*to\s*speech|tts|voiceover|seed\s*audio|audio|speech|voice)\b/i.test(
-      name,
-    );
-  const frameClassName = className ?? "w-32 h-22 2xl:w-40 2xl:h-28";
-
-  // Feature charges (voiceover, voice change, etc.) have no media URL.
-  if (mediaType === "feature" || !url) {
-    return (
-      <div
-        className={`${frameClassName} flex items-center justify-center overflow-hidden rounded bg-neutral-800 border border-neutral-700 text-[9px] text-neutral-500 uppercase tracking-wide`}
-        title={name}
-      >
-        feat
-      </div>
-    );
-  }
-  if (mediaType === "audio" || (failed && looksAudio)) {
-    return (
-      <div
-        className={`${frameClassName} flex items-center justify-center overflow-hidden rounded bg-neutral-900 border border-neutral-700 text-[9px] text-sky-300 uppercase tracking-[0.2em]`}
-        title={name}
-      >
-        audio
-      </div>
-    );
-  }
-  if (failed) {
-    return (
-      <div
-        className={`${frameClassName} flex items-center justify-center overflow-hidden rounded bg-neutral-800 text-[10px] text-neutral-600`}
-        title={name}
-      >
-        —
-      </div>
-    );
-  }
-  if (mediaType === "video") {
-    return (
-      <div
-        className={`${frameClassName} relative overflow-hidden rounded-[inherit] bg-black`}
-      >
-        <video
-          src={url}
-          className="h-full w-full rounded-[inherit] object-cover bg-black"
-          preload="none"
-          muted
-          playsInline
-          onError={() => setFailed(true)}
-          onMouseEnter={(e) => {
-            void (e.currentTarget as HTMLVideoElement).play();
-          }}
-          onMouseLeave={(e) => {
-            const v = e.currentTarget as HTMLVideoElement;
-            v.pause();
-            v.currentTime = 0;
-          }}
-        />
-        <span className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
-          <span className="flex size-8 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white shadow-lg backdrop-blur-sm">
-            <Play className="ml-0.5 size-3.5 fill-current" />
-          </span>
-        </span>
-      </div>
-    );
-  }
-  return (
-    <div
-      className={`${frameClassName} overflow-hidden rounded-[inherit] bg-neutral-800`}
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={url}
-        alt={name}
-        className="h-full w-full rounded-[inherit] object-cover bg-neutral-800"
-        loading="lazy"
-        decoding="async"
-        onError={() => setFailed(true)}
-      />
-    </div>
-  );
-}
-
-function ReworkTag() {
-  return (
-    <Badge
-      variant="outline"
-      className="text-orange-300 border-orange-700 bg-orange-950/40 text-[10px]"
-    >
-      Rework
-    </Badge>
-  );
-}
 
 function hfAssetUrl(externalId: string) {
   return `https://higgsfield.ai/asset/all/${externalId}`;
@@ -355,200 +227,10 @@ function PreviewGridSection({
   );
 }
 
-export function UnassignButton({
-  generationId,
-  assignedAt,
-  assignedBy,
-  userRole,
-  userId,
-  onDone,
-  onError,
-}: {
-  generationId: string;
-  assignedAt: string | null;
-  assignedBy: string | null;
-  userRole: string;
-  userId: string;
-  onDone: () => void;
-  onError: (msg: string) => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [isPending, startTransition] = useTransition();
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
-
-  const isMasterOrManager =
-    userRole === "master" || isManagerLikeRole(userRole);
-  const isAssigner = assignedBy === userId;
-
-  useEffect(() => {
-    if (isMasterOrManager) return;
-    if (!isAssigner || !assignedAt) return;
-
-    const assignedTime = new Date(assignedAt).getTime();
-    function check() {
-      const remaining = UNDO_WINDOW_MS - (Date.now() - assignedTime);
-      if (remaining <= 0) {
-        setTimeLeft(0);
-      } else {
-        setTimeLeft(Math.ceil(remaining / 1000));
-      }
-    }
-    check();
-    const interval = setInterval(check, 1000);
-    return () => clearInterval(interval);
-  }, [isMasterOrManager, isAssigner, assignedAt]);
-
-  if (!isMasterOrManager) {
-    if (!isAssigner || timeLeft === 0 || timeLeft === null) return null;
-  }
-
-  async function handleUnassign() {
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/generations/${generationId}/unassign`, {
-        method: "POST",
-      });
-      if (res.ok) {
-        // Wrap the parent's refresh in a transition so the button stays
-        // disabled until the new server data has rendered (no enabled flicker).
-        startTransition(() => {
-          onDone();
-        });
-      } else {
-        const data = await res.json().catch(() => ({}));
-        onError(`Unassign failed: ${data.error || "unknown error"}`);
-      }
-    } catch (err) {
-      onError(
-        `Unassign failed: ${err instanceof Error ? err.message : "network error"}`,
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Button
-      size="sm"
-      variant="outline"
-      onClick={handleUnassign}
-      disabled={busy || isPending}
-      className="h-6 text-xs px-2 text-red-400 border-red-900 hover:bg-red-950"
-    >
-      {busy || isPending
-        ? "…"
-        : isMasterOrManager
-          ? "Unassign"
-          : `Undo (${timeLeft}s)`}
-    </Button>
-  );
-}
-
-// Renders the per-row action button in the Wastage table. Clicking it pulls
-// the generation fully back to the unassigned pool (clears client/work/waste
-// fields). The label is "Unassign" — replacing the older "Mark Useful" which
-// only flipped is_waste back to false and left the row in the Assigned table.
-export function WastageButton({
-  generationId,
-  wastedAt,
-  wastedBy,
-  userRole,
-  userId,
-  onDone,
-  onError,
-}: {
-  generationId: string;
-  wastedAt: string | null;
-  wastedBy: string | null;
-  userRole: string;
-  userId: string;
-  onDone: () => void;
-  onError: (msg: string) => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [isPending, startTransition] = useTransition();
-  const [timeLeft, setTimeLeft] = useState<number | null>(null);
-
-  const isMasterOrManager =
-    userRole === "master" || isManagerLikeRole(userRole);
-  const isWaster = wastedBy === userId;
-  const isWasted = wastedAt !== null;
-
-  useEffect(() => {
-    if (!isWasted || !wastedAt) return;
-    if (isMasterOrManager) return;
-    if (!isWaster) return;
-
-    const wastedTime = new Date(wastedAt).getTime();
-    function check() {
-      const remaining = UNDO_WINDOW_MS - (Date.now() - wastedTime);
-      if (remaining <= 0) {
-        setTimeLeft(0);
-      } else {
-        setTimeLeft(Math.ceil(remaining / 1000));
-      }
-    }
-    check();
-    const interval = setInterval(check, 1000);
-    return () => clearInterval(interval);
-  }, [isWasted, wastedAt, isMasterOrManager, isWaster]);
-
-  async function handleUnassign() {
-    setBusy(true);
-    try {
-      const res = await fetch(`/api/generations/${generationId}/unassign`, {
-        method: "POST",
-      });
-      if (res.ok) {
-        startTransition(() => {
-          onDone();
-        });
-      } else {
-        const data = await res.json().catch(() => ({}));
-        onError(`Unassign failed: ${data.error || "unknown error"}`);
-      }
-    } catch (err) {
-      onError(
-        `Unassign failed: ${err instanceof Error ? err.message : "network error"}`,
-      );
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  if (!isWasted) return null;
-
-  // Visibility: master/manager anytime; waster only within the 60s window.
-  const isWithinWindow = isWaster && timeLeft !== null && timeLeft > 0;
-  if (!isMasterOrManager && !isWithinWindow) return null;
-
-  return (
-    <Button
-      size="sm"
-      variant="outline"
-      onClick={handleUnassign}
-      disabled={busy || isPending}
-      className="h-6 text-xs px-2 text-lime-400 border-lime-700 hover:bg-lime-950"
-    >
-      {busy || isPending ? (
-        "…"
-      ) : (
-        <>
-          <Undo2 className="size-3 mr-1" />
-          {isMasterOrManager && !isWithinWindow
-            ? "Unassign"
-            : `Unassign (${timeLeft}s)`}
-        </>
-      )}
-    </Button>
-  );
-}
-
 export function AssignTables({
   workId,
   clientName,
   assignedToClient,
-  workStatusMap,
   userRole,
   userId,
   accounts,
@@ -561,6 +243,15 @@ export function AssignTables({
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [assignedVisibleCount, setAssignedVisibleCount] = useState(
+    WORK_SECTION_INITIAL_LIMIT,
+  );
+  const [wastedVisibleCount, setWastedVisibleCount] = useState(
+    WORK_SECTION_INITIAL_LIMIT,
+  );
+  const [irrelevantVisibleCount, setIrrelevantVisibleCount] = useState(
+    WORK_SECTION_INITIAL_LIMIT,
+  );
   const [previewSize, setPreviewSize] = useGenerationPreviewSize(
     "work-assign-preview-size",
   );
@@ -584,10 +275,13 @@ export function AssignTables({
 
   const assignedToThisWork = assignedUseful.filter((g) => g.work_id === workId);
   const assignedElsewhere = assignedUseful.filter((g) => g.work_id !== workId);
+  const visibleAssigned = assignedUseful.slice(0, assignedVisibleCount);
+  const visibleWasted = wasted.slice(0, wastedVisibleCount);
+  const visibleIrrelevant = allIrrelevant.slice(0, irrelevantVisibleCount);
 
-  const groupedAssigned = groupByDay(assignedUseful);
-  const groupedWasted = groupByDay(wasted);
-  const groupedIrrelevant = groupByDay(allIrrelevant);
+  const groupedAssigned = groupByDay(visibleAssigned);
+  const groupedWasted = groupByDay(visibleWasted);
+  const groupedIrrelevant = groupByDay(visibleIrrelevant);
   const generationIndex = useMemo(() => {
     return new Map<string, Generation>([
       ...assignedUseful.map((g) => [g.id, g] as const),
@@ -605,22 +299,6 @@ export function AssignTables({
     (s, g) => s + parseFloat(g.credits || "0"),
     0,
   );
-
-  // The Rework tag is a CROSS-WORK signal: it flags a row whose source
-  // work is in 'rework' status AND is DIFFERENT from the work we're viewing.
-  // The current work's own status already lives in the header status badge,
-  // so re-stamping every row would be redundant noise.
-  function renderReworkTag(genWorkId: string | null) {
-    if (!genWorkId) return null;
-    if (genWorkId === workId) return null;
-    const status = workStatusMap[genWorkId];
-    if (status !== "rework") return null;
-    return (
-      <span className="ml-1 inline-flex align-middle">
-        <ReworkTag />
-      </span>
-    );
-  }
 
   const canSelectGeneration = useCallback(
     (generation: Generation) =>
@@ -724,6 +402,8 @@ export function AssignTables({
                 type="button"
                 onClick={() => {
                   setSelectedAccountLabel(acc.label);
+                  setAssignedVisibleCount(WORK_SECTION_INITIAL_LIMIT);
+                  setWastedVisibleCount(WORK_SECTION_INITIAL_LIMIT);
                 }}
                 className={`text-xs px-2 py-0.5 rounded transition-colors ${
                   selectedAccountLabel === acc.label
@@ -763,18 +443,39 @@ export function AssignTables({
               <p>Nothing assigned to {clientName} yet.</p>
             </div>
           ) : (
-            <PreviewGridSection
-              title={`Assigned to ${clientName}`}
-              total={assignedUseful.length}
-              groups={groupedAssigned}
-              selectedIds={selectedIds}
-              onToggle={toggleSelection}
-              onToggleDay={toggleSelectionGroup}
-              selectableKey={canSelectGeneration}
-              sectionClassName="px-4 py-3"
-              gridClassName="grid gap-1.5"
-              tileSize={previewSize}
-            />
+            <>
+              <PreviewGridSection
+                title={`Assigned to ${clientName}`}
+                total={assignedUseful.length}
+                groups={groupedAssigned}
+                selectedIds={selectedIds}
+                onToggle={toggleSelection}
+                onToggleDay={toggleSelectionGroup}
+                selectableKey={canSelectGeneration}
+                sectionClassName="px-4 py-3"
+                gridClassName="grid gap-1.5"
+                tileSize={previewSize}
+              />
+              {visibleAssigned.length < assignedUseful.length && (
+                <div className="border-t border-neutral-800 px-4 py-3 text-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      setAssignedVisibleCount((count) =>
+                        Math.min(
+                          count + WORK_SECTION_LOAD_STEP,
+                          assignedUseful.length,
+                        ),
+                      )
+                    }
+                    className="h-8 text-xs"
+                  >
+                    Load more
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
 
@@ -806,18 +507,36 @@ export function AssignTables({
               <p>No wastage yet.</p>
             </div>
           ) : (
-            <PreviewGridSection
-              title="Wastage"
-              total={wasted.length}
-              groups={groupedWasted}
-              selectedIds={selectedIds}
-              onToggle={toggleSelection}
-              onToggleDay={toggleSelectionGroup}
-              selectableKey={canSelectGeneration}
-              sectionClassName="px-4 py-3"
-              gridClassName="grid gap-1.5"
-              tileSize={previewSize}
-            />
+            <>
+              <PreviewGridSection
+                title="Wastage"
+                total={wasted.length}
+                groups={groupedWasted}
+                selectedIds={selectedIds}
+                onToggle={toggleSelection}
+                onToggleDay={toggleSelectionGroup}
+                selectableKey={canSelectGeneration}
+                sectionClassName="px-4 py-3"
+                gridClassName="grid gap-1.5"
+                tileSize={previewSize}
+              />
+              {visibleWasted.length < wasted.length && (
+                <div className="border-t border-neutral-800 px-4 py-3 text-center">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() =>
+                      setWastedVisibleCount((count) =>
+                        Math.min(count + WORK_SECTION_LOAD_STEP, wasted.length),
+                      )
+                    }
+                    className="h-8 text-xs"
+                  >
+                    Load more
+                  </Button>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -854,6 +573,25 @@ export function AssignTables({
               tileSize={previewSize}
             />
           </div>
+          {visibleIrrelevant.length < allIrrelevant.length && (
+            <div className="border-t border-neutral-800 px-4 py-3 text-center">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() =>
+                  setIrrelevantVisibleCount((count) =>
+                    Math.min(
+                      count + WORK_SECTION_LOAD_STEP,
+                      allIrrelevant.length,
+                    ),
+                  )
+                }
+                className="h-8 text-xs"
+              >
+                Load more
+              </Button>
+            </div>
+          )}
         </div>
       )}
 

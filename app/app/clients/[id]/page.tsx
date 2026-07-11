@@ -33,10 +33,9 @@ import {
 import { ActivityLog } from "@/components/ui/activity-log";
 
 const WORK_ALLOWED_STATUSES: ClientStatus[] = ["trial", "ongoing", "in_talk"];
-const NIL_UUID = "00000000-0000-0000-0000-000000000000";
-// Cap on rows passed to ClientGenerationsTables (paginates client-side @ 50/page).
-// 500 = 10 pages of history. Aggregates come from RPCs so they stay accurate.
-const GENERATIONS_DISPLAY_LIMIT = 500;
+// Keep the interactive page light; aggregate RPCs below keep totals accurate.
+const GENERATIONS_DISPLAY_LIMIT = 240;
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 const RANGE_DAYS: Record<ClientRange, number | null> = {
   all: null,
@@ -50,6 +49,10 @@ const RANGE_LABEL: Record<ClientRange, string> = {
   month: "Last 30 days",
   year: "Last 365 days",
 };
+
+function getRangeStartIso(daysBack: number) {
+  return new Date(Date.now() - daysBack * MS_PER_DAY).toISOString();
+}
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -126,10 +129,7 @@ async function ClientDetailContent({
   const supabase = await createClient();
 
   const daysBack = RANGE_DAYS[range];
-  const fromIso =
-    daysBack === null
-      ? null
-      : new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
+  const fromIso = daysBack === null ? null : getRangeStartIso(daysBack);
 
   // WAVE 1 — auth + client fetch in parallel. RLS validates the JWT
   // from cookies independently, so the client query works while auth resolves.

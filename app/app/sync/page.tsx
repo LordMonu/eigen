@@ -6,6 +6,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
 } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-browser";
@@ -18,11 +19,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { MediaPreview } from "@/components/app/generations/media-preview";
 import {
-  MediaPreview,
   UnassignButton,
   WastageButton,
-} from "@/components/app/works/[id]/assign-tables";
+} from "@/components/app/generations/action-buttons";
 import { UnassignedGenerationsGrid } from "@/components/app/sync/unassigned-generations-grid";
 import { ClientFormDialog } from "@/components/app/clients/client-form-dialog";
 import { CreateWorkDialog } from "@/components/app/works/create-work-dialog";
@@ -144,7 +145,7 @@ export default function SyncPage() {
   const [selectedUnassignedIds, setSelectedUnassignedIds] = useState<
     Set<string>
   >(new Set());
-  const [rangeAnchorId, setRangeAnchorId] = useState<string | null>(null);
+  const rangeAnchorIdRef = useRef<string | null>(null);
   const [bulkClientId, setBulkClientId] = useState("");
   const [bulkWorkId, setBulkWorkId] = useState("");
   const [clientDialogOpen, setClientDialogOpen] = useState(false);
@@ -272,6 +273,7 @@ export default function SyncPage() {
               count: (options.includeCount ?? !append) ? "exact" : undefined,
               excludeFeatures: true,
               pageSize,
+              previewOnly: true,
             }
           : undefined,
       );
@@ -369,17 +371,14 @@ export default function SyncPage() {
   }, [loadAccountAccess]);
 
   useEffect(() => {
-    if (selectedAccountId) {
-      setSelectedUnassignedIds(new Set());
-      setRangeAnchorId(null);
-      void loadInitialData();
-    }
-  }, [selectedAccountId, loadInitialData]);
-
-  useEffect(() => {
     if (!selectedAccountId) return;
-    void loadClientsAndWorks();
-  }, [loadClientsAndWorks, selectedAccountId]);
+    const frame = window.requestAnimationFrame(() => {
+      setSelectedUnassignedIds(new Set());
+      rangeAnchorIdRef.current = null;
+      void Promise.all([loadInitialData(), loadClientsAndWorks()]);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [loadClientsAndWorks, loadInitialData, selectedAccountId]);
 
   async function syncSelectedAccount(force = false, full = false) {
     if (!selectedAccountId) return;
@@ -458,7 +457,7 @@ export default function SyncPage() {
 
   const resetUnassignedSelection = useCallback(() => {
     setSelectedUnassignedIds(new Set());
-    setRangeAnchorId(null);
+    rangeAnchorIdRef.current = null;
   }, []);
 
   const loadMoreUnassignedRows = useCallback(() => {
@@ -492,19 +491,24 @@ export default function SyncPage() {
         .map((generation) => generation.id),
     [unassigned],
   );
+  const orderedUnassignedIndex = useMemo(
+    () => new Map(orderedUnassignedIds.map((id, index) => [id, index])),
+    [orderedUnassignedIds],
+  );
 
   const toggleUnassignedSelection = useCallback((id: string) => {
     setSelectedUnassignedIds((prev) => {
       const next = new Set(prev);
-      const currentIndex = orderedUnassignedIds.indexOf(id);
-      const anchorIndex = rangeAnchorId
-        ? orderedUnassignedIds.indexOf(rangeAnchorId)
+      const anchorId = rangeAnchorIdRef.current;
+      const currentIndex = orderedUnassignedIndex.get(id) ?? -1;
+      const anchorIndex = anchorId
+        ? (orderedUnassignedIndex.get(anchorId) ?? -1)
         : -1;
 
       if (
         anchorIndex !== -1 &&
         currentIndex !== -1 &&
-        id !== rangeAnchorId &&
+        id !== anchorId &&
         !prev.has(id)
       ) {
         const [start, end] =
@@ -522,15 +526,15 @@ export default function SyncPage() {
 
       return next;
     });
-    setRangeAnchorId(id);
-  }, [orderedUnassignedIds, rangeAnchorId]);
+    rangeAnchorIdRef.current = id;
+  }, [orderedUnassignedIds, orderedUnassignedIndex]);
 
   async function handleBulkAction(mode: "assign" | "waste" | "irrelevant") {
     setRowError(null);
     if (selectedUnassignedIds.size === 0) return;
 
-    const selectedGenerations = visibleUnassigned.filter((g) =>
-      selectedUnassignedIds.has(g.id),
+    const selectedGenerations = unassigned.filter(
+      (g) => g.media_type !== "feature" && selectedUnassignedIds.has(g.id),
     );
     if (selectedGenerations.length === 0) {
       resetUnassignedSelection();
@@ -702,38 +706,21 @@ export default function SyncPage() {
     () => worksById.get(bulkWorkId) ?? null,
     [bulkWorkId, worksById],
   );
-  const visibleUnassigned = useMemo(
-    () => unassigned.filter((g) => g.media_type !== "feature"),
+  const groupedUnassigned = useMemo(
+    () => groupByDay(unassigned.filter((g) => g.media_type !== "feature")),
     [unassigned],
   );
-  const visibleAssigned = useMemo(
-    () => assigned.filter((g) => g.media_type !== "feature"),
+  const groupedAssigned = useMemo(
+    () => groupByDay(assigned.filter((g) => g.media_type !== "feature")),
     [assigned],
   );
-  const visibleWasted = useMemo(
-    () => wasted.filter((g) => g.media_type !== "feature"),
+  const groupedWasted = useMemo(
+    () => groupByDay(wasted.filter((g) => g.media_type !== "feature")),
     [wasted],
   );
-  const visibleIrrelevant = useMemo(
-    () => irrelevant.filter((g) => g.media_type !== "feature"),
-    [irrelevant],
-  );
-
-  const groupedUnassigned = useMemo(
-    () => groupByDay(visibleUnassigned),
-    [visibleUnassigned],
-  );
-  const groupedAssigned = useMemo(
-    () => groupByDay(visibleAssigned),
-    [visibleAssigned],
-  );
-  const groupedWasted = useMemo(
-    () => groupByDay(visibleWasted),
-    [visibleWasted],
-  );
   const groupedIrrelevant = useMemo(
-    () => groupByDay(visibleIrrelevant),
-    [visibleIrrelevant],
+    () => groupByDay(irrelevant.filter((g) => g.media_type !== "feature")),
+    [irrelevant],
   );
 
   const refreshAssignedAfterUnassign = useCallback(() => {
@@ -1002,7 +989,7 @@ export default function SyncPage() {
                   )}
                 </Button>
                 <span className="text-sm text-neutral-500">
-                  Showing {visibleUnassigned.length} of {unassignedTotal}
+                  Showing {unassigned.length} of {unassignedTotal}
                 </span>
               </div>
             )}

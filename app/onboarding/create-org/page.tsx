@@ -30,16 +30,20 @@ export default function CreateOrgPage() {
   useEffect(() => {
     const trimmed = orgName.trim()
     if (!trimmed) {
-      setAvailability('idle')
-      setTakenName(null)
-      return
+      const handle = setTimeout(() => {
+        setAvailability('idle')
+        setTakenName(null)
+      }, 0)
+      return () => clearTimeout(handle)
     }
     if (trimmed.length < 2) {
-      setAvailability('invalid')
-      return
+      const handle = setTimeout(() => {
+        setAvailability('invalid')
+      }, 0)
+      return () => clearTimeout(handle)
     }
-    setAvailability('checking')
     const handle = setTimeout(async () => {
+      setAvailability('checking')
       // Case-insensitive exact match — orgs.name has a citext or unique
       // constraint at the DB; we still use ilike for safety.
       const { data } = await supabase

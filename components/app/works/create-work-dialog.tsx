@@ -31,15 +31,6 @@ function toIsoDate(d: Date): string {
   return `${y}-${m}-${day}`
 }
 
-// Get today's date in YYYY-MM-DD format (no past dates allowed)
-function getTodayDateString(): string {
-  const today = new Date()
-  const year = today.getFullYear()
-  const month = String(today.getMonth() + 1).padStart(2, '0')
-  const day = String(today.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
 interface Member {
   user_id: string
   full_name: string

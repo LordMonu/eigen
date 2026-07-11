@@ -2,7 +2,7 @@
 
 import { memo } from "react";
 import { Check } from "lucide-react";
-import { MediaPreview } from "@/components/app/works/[id]/assign-tables";
+import { MediaPreview } from "@/components/app/generations/media-preview";
 import {
   DEFAULT_GENERATION_PREVIEW_SIZE,
   getGenerationCheckboxClassName,

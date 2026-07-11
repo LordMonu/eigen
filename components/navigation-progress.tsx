@@ -47,12 +47,17 @@ export function NavigationProgress() {
   // When pathname changes, the navigation completed — finish + hide.
   useEffect(() => {
     if (!active) return;
-    setProgress(100);
+    const frame = window.requestAnimationFrame(() => {
+      setProgress(100);
+    });
     const t = setTimeout(() => {
       setActive(false);
       setProgress(0);
     }, 250);
-    return () => clearTimeout(t);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      clearTimeout(t);
+    };
   }, [pathname, active]);
 
   // Trickle progress up while waiting.

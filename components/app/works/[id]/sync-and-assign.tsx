@@ -6,6 +6,7 @@ import {
   useTransition,
   useEffect,
   useMemo,
+  useRef,
 } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase-browser";
@@ -105,7 +106,7 @@ export function SyncAndAssign({
   const [loadingMoreUnassigned, setLoadingMoreUnassigned] = useState(false);
   const [hasMoreUnassigned, setHasMoreUnassigned] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [rangeAnchorId, setRangeAnchorId] = useState<string | null>(null);
+  const rangeAnchorIdRef = useRef<string | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<string>(
     accounts[0]?.id || "",
   );
@@ -150,6 +151,10 @@ export function SyncAndAssign({
     () => visibleUnassigned.map((generation) => generation.id),
     [visibleUnassigned],
   );
+  const orderedUnassignedIndex = useMemo(
+    () => new Map(orderedUnassignedIds.map((id, index) => [id, index])),
+    [orderedUnassignedIds],
+  );
 
   useEffect(() => {
     if (!selectedAccountId) return;
@@ -183,6 +188,7 @@ export function SyncAndAssign({
           count: (options.includeCount ?? !append) ? "exact" : undefined,
           excludeFeatures: true,
           pageSize: PICKER_BATCH_SIZE,
+          previewOnly: true,
         },
       );
       const nextTotal = count ?? unassignedTotal;
@@ -223,31 +229,37 @@ export function SyncAndAssign({
 
   useEffect(() => {
     if (pickerOpen && selectedAccountId) {
-      setPickerPage(1);
-      void Promise.all([
-        loadPickerStats(),
-        loadPickerPage(1, { includeCount: true }),
-      ]);
+      const frame = window.requestAnimationFrame(() => {
+        setPickerPage(1);
+        void Promise.all([
+          loadPickerStats(),
+          loadPickerPage(1, { includeCount: true }),
+        ]);
+      });
+      return () => window.cancelAnimationFrame(frame);
     }
   }, [selectedAccountId, pickerOpen, loadPickerStats, loadPickerPage]);
 
   // Load all clients when Modal B opens
   useEffect(() => {
     if (!destOpen) return;
-    setDestClientId(clientId);
-    setDestWorkId(workId);
-    setLoadingSel(true);
-    supabase
-      .from("clients")
-      .select("id, name")
-      .is("deleted_at", null)
-      .order("name")
-      .then(({ data }) => {
-        setSelClients(
-          data && data.length > 0 ? data : [{ id: clientId, name: clientName }],
-        );
-        setLoadingSel(false);
-      });
+    const frame = window.requestAnimationFrame(() => {
+      setDestClientId(clientId);
+      setDestWorkId(workId);
+      setLoadingSel(true);
+      supabase
+        .from("clients")
+        .select("id, name")
+        .is("deleted_at", null)
+        .order("name")
+        .then(({ data }) => {
+          setSelClients(
+            data && data.length > 0 ? data : [{ id: clientId, name: clientName }],
+          );
+          setLoadingSel(false);
+        });
+    });
+    return () => window.cancelAnimationFrame(frame);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [destOpen]);
 
@@ -358,7 +370,7 @@ export function SyncAndAssign({
       markSynced(selectedAccountId);
       setSyncMessage(data?.message || "Sync complete.");
       setSelectedIds(new Set());
-      setRangeAnchorId(null);
+      rangeAnchorIdRef.current = null;
       setPickerPage(1);
       await loadPickerStats();
       await loadPickerPage(1, { silent: true, includeCount: true });
@@ -375,7 +387,7 @@ export function SyncAndAssign({
     setSyncError(null);
     setSyncMessage(null);
     setSelectedIds(new Set());
-    setRangeAnchorId(null);
+    rangeAnchorIdRef.current = null;
     setPickerPage(1);
     setPickerOpen(true);
 
@@ -387,15 +399,16 @@ export function SyncAndAssign({
   const toggleSelect = useCallback((genId: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
-      const currentIndex = orderedUnassignedIds.indexOf(genId);
-      const anchorIndex = rangeAnchorId
-        ? orderedUnassignedIds.indexOf(rangeAnchorId)
+      const anchorId = rangeAnchorIdRef.current;
+      const currentIndex = orderedUnassignedIndex.get(genId) ?? -1;
+      const anchorIndex = anchorId
+        ? (orderedUnassignedIndex.get(anchorId) ?? -1)
         : -1;
 
       if (
         anchorIndex !== -1 &&
         currentIndex !== -1 &&
-        genId !== rangeAnchorId &&
+        genId !== anchorId &&
         !prev.has(genId)
       ) {
         const [start, end] =
@@ -412,8 +425,8 @@ export function SyncAndAssign({
       }
       return next;
     });
-    setRangeAnchorId(genId);
-  }, [orderedUnassignedIds, rangeAnchorId]);
+    rangeAnchorIdRef.current = genId;
+  }, [orderedUnassignedIds, orderedUnassignedIndex]);
 
   const toggleSelectDay = useCallback((items: Array<{ id: string }>) => {
     setSelectedIds((prev) => {
@@ -720,7 +733,7 @@ export function SyncAndAssign({
           setSelectedAccountId(accountId);
           setPickerPage(1);
           setSelectedIds(new Set());
-          setRangeAnchorId(null);
+          rangeAnchorIdRef.current = null;
         }}
         onRefresh={() => void syncAccount(true)}
         onFullResync={() => {

@@ -2,7 +2,7 @@
 
 // Persistent /app/* chrome. Sidebar + header stay mounted on client navigation;
 // only the main content slot (children) swaps when the route changes.
-import { memo, useRef, type ReactNode } from 'react'
+import { memo, useMemo, type ReactNode } from 'react'
 import type { ActiveMembership } from '@/lib/auth-helpers'
 import { AppSidebar } from '@/components/app-sidebar'
 import { Separator } from '@/components/ui/separator'
@@ -21,10 +21,6 @@ export type ShellMembership = Pick<
 type AppShellProps = {
   membership: ShellMembership
   children: ReactNode
-}
-
-function membershipKey(m: ShellMembership) {
-  return `${m.org_name}:${m.role}:${m.full_name}`
 }
 
 const AppHeader = memo(function AppHeader({ orgName }: { orgName: string }) {
@@ -55,19 +51,23 @@ const SidebarChrome = memo(function SidebarChrome({
 })
 
 export function AppShell({ membership, children }: AppShellProps) {
-  // Keep a stable membership reference across layout re-renders so memoized
-  // sidebar chrome does not re-render when only {children} change.
-  const stableMembership = useRef(membership)
-  if (membershipKey(membership) !== membershipKey(stableMembership.current)) {
-    stableMembership.current = membership
-  }
+  // Keep sidebar props stable across route transitions without mutating refs
+  // during render, so React can keep this shell optimized.
+  const stableMembership = useMemo(
+    () => ({
+      org_name: membership.org_name,
+      role: membership.role,
+      full_name: membership.full_name,
+    }),
+    [membership.org_name, membership.role, membership.full_name],
+  )
 
   return (
     <TooltipProvider delay={0}>
       <SidebarProvider>
-        <SidebarChrome membership={stableMembership.current} />
+        <SidebarChrome membership={stableMembership} />
         <SidebarInset className="flex h-svh max-h-svh min-h-0 flex-col overflow-hidden bg-black">
-          <AppHeader orgName={stableMembership.current.org_name} />
+          <AppHeader orgName={stableMembership.org_name} />
           <div className="min-h-0 flex-1 overflow-y-auto lg:pt-0">{children}</div>
         </SidebarInset>
       </SidebarProvider>

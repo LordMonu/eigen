@@ -2,11 +2,11 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { MediaPreview } from "@/components/app/generations/media-preview";
 import {
-  MediaPreview,
   UnassignButton,
   WastageButton,
-} from "@/components/app/works/[id]/assign-tables";
+} from "@/components/app/generations/action-buttons";
 import Link from "next/link";
 import {
   PaginationButtons,

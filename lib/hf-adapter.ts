@@ -326,7 +326,10 @@ function buildFeatureGenerations(
   }
 
   return gens
-    .map(({ _timeMs: _omit, ...g }) => g)
+    .map(({ _timeMs: omittedTimeMs, ...g }) => {
+      void omittedTimeMs
+      return g
+    })
     .filter((g) => g.credits > 0)
 }
 
