@@ -59,18 +59,10 @@ export function MediaPreview({
         <video
           src={url}
           className="h-full w-full rounded-[inherit] object-cover bg-black"
-          preload="none"
+          preload="metadata"
           muted
           playsInline
           onError={() => setFailed(true)}
-          onMouseEnter={(e) => {
-            void (e.currentTarget as HTMLVideoElement).play();
-          }}
-          onMouseLeave={(e) => {
-            const video = e.currentTarget as HTMLVideoElement;
-            video.pause();
-            video.currentTime = 0;
-          }}
         />
         <span className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
           <span className="flex size-8 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white shadow-lg backdrop-blur-sm">
