@@ -1,8 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
+import { Search, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -21,6 +23,7 @@ interface Props {
   totalCount: number
   statusCounts: Record<ClientStatus, number>
   activeFilter: string
+  activeQuery: string
   canCreate: boolean
 }
 
@@ -28,14 +31,34 @@ export function ClientsHeader({
   totalCount,
   statusCounts,
   activeFilter,
+  activeQuery,
   canCreate,
 }: Props) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState(activeQuery)
+
+  function pushFilters(nextStatus: string, nextQuery: string) {
+    const params = new URLSearchParams()
+    if (nextStatus !== 'all') params.set('status', nextStatus)
+    const trimmedQuery = nextQuery.trim()
+    if (trimmedQuery) params.set('q', trimmedQuery)
+    const qs = params.toString()
+    router.replace(qs ? `/app/clients?${qs}` : '/app/clients')
+  }
 
   function handleFilterChange(value: string) {
-    const url = value === 'all' ? '/app/clients' : `/app/clients?status=${value}`
-    router.push(url)
+    pushFilters(value, query)
+  }
+
+  function handleSearchSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    pushFilters(activeFilter, query)
+  }
+
+  function clearSearch() {
+    setQuery('')
+    pushFilters(activeFilter, '')
   }
 
   return (
@@ -50,6 +73,38 @@ export function ClientsHeader({
         </div>
 
         <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-3 shrink-0">
+          <form
+            onSubmit={handleSearchSubmit}
+            className="flex w-full items-center gap-2 sm:w-auto"
+          >
+            <div className="relative w-full sm:w-64">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-neutral-500" />
+              <Input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Filter clients"
+                className="h-9 border-neutral-700 bg-neutral-900 pl-8 pr-8 text-sm"
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-neutral-500 transition hover:text-white"
+                  aria-label="Clear client filter"
+                >
+                  <X className="size-3.5" />
+                </button>
+              )}
+            </div>
+            <Button
+              type="submit"
+              variant="outline"
+              className="h-9 shrink-0 border-neutral-700 bg-neutral-900 text-xs"
+            >
+              Filter
+            </Button>
+          </form>
+
           <Select
             value={activeFilter}
             onValueChange={(v) => handleFilterChange(v as string)}

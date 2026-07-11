@@ -30,6 +30,7 @@ import {
   type UnassignedGeneration,
 } from "./sync-and-assign-modals";
 import { runConcurrentBatches } from "@/lib/run-concurrent-batches";
+import { useGenerationPreviewSize } from "@/components/app/generations/preview-size-control";
 
 const PICKER_BATCH_SIZE = 50;
 
@@ -94,6 +95,9 @@ export function SyncAndAssign({
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerPreviewSize, setPickerPreviewSize] = useGenerationPreviewSize(
+    "work-sync-picker-preview-size",
+  );
   const [unassigned, setUnassigned] = useState<UnassignedGeneration[]>([]);
   const [unassignedTotal, setUnassignedTotal] = useState(0);
   const [unassignedCredits, setUnassignedCredits] = useState(0);
@@ -732,6 +736,8 @@ export function SyncAndAssign({
         onOpenDestination={openDestination}
         onLoadMore={loadMorePicker}
         cooldownLeft={cooldownLeft}
+        previewSize={pickerPreviewSize}
+        onPreviewSizeChange={setPickerPreviewSize}
         destOpen={destOpen}
         destClientId={destClientId}
         setDestClientId={setDestClientId}

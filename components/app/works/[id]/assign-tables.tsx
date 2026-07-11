@@ -3,11 +3,19 @@ import { Fragment, useState, useEffect, useMemo, useTransition, useCallback } fr
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Check, Undo2 } from "lucide-react";
+import { Check, Play, Undo2 } from "lucide-react";
 import type { WorkStatus } from "@/lib/work-helpers";
 import type { Role } from "@/lib/roles";
 import { isManagerLikeRole } from "@/lib/roles";
 import { runConcurrentBatches } from "@/lib/run-concurrent-batches";
+import {
+  DEFAULT_GENERATION_PREVIEW_SIZE,
+  getGenerationCheckboxClassName,
+  getGenerationGridStyle,
+  getGenerationTileClassName,
+  PreviewSizeControl,
+  useGenerationPreviewSize,
+} from "@/components/app/generations/preview-size-control";
 
 // Per spec: 60-second window for unassign-undo / mark-useful-undo.
 // Kept in sync with the same threshold on the unassign + waste API routes.
@@ -145,7 +153,7 @@ export function MediaPreview({
   if (mediaType === "video") {
     return (
       <div
-        className={`${frameClassName} overflow-hidden rounded-[inherit] bg-black`}
+        className={`${frameClassName} relative overflow-hidden rounded-[inherit] bg-black`}
       >
         <video
           src={url}
@@ -163,6 +171,11 @@ export function MediaPreview({
             v.currentTime = 0;
           }}
         />
+        <span className="pointer-events-none absolute inset-x-0 bottom-2 flex justify-center">
+          <span className="flex size-8 items-center justify-center rounded-full border border-white/15 bg-black/55 text-white shadow-lg backdrop-blur-sm">
+            <Play className="ml-0.5 size-3.5 fill-current" />
+          </span>
+        </span>
       </div>
     );
   }
@@ -203,11 +216,13 @@ function PreviewTile({
   checked,
   selectable,
   onToggle,
+  tileSize,
 }: {
   generation: Generation;
   checked: boolean;
   selectable: boolean;
   onToggle: (id: string) => void;
+  tileSize: number;
 }) {
   return (
     <a
@@ -215,7 +230,7 @@ function PreviewTile({
       target="_blank"
       rel="noreferrer"
       title="Open in Higgsfield"
-      className={`group relative block aspect-square overflow-hidden rounded-lg border bg-neutral-950 transition ${
+      className={`${getGenerationTileClassName(tileSize)} ${
         checked
           ? "border-lime-400 shadow-[0_0_0_1px_rgba(163,230,53,0.45)]"
           : "border-neutral-800 hover:border-neutral-600"
@@ -236,7 +251,7 @@ function PreviewTile({
             event.stopPropagation();
             onToggle(generation.id);
           }}
-          className={`absolute left-2 top-2 z-10 flex size-6 items-center justify-center rounded-lg border-2 border-white/25 bg-black/35 text-transparent backdrop-blur-sm transition hover:border-white/45 ${
+          className={`${getGenerationCheckboxClassName(tileSize)} ${
             checked ? "border-lime-400 bg-lime-400 text-black" : ""
           }`}
         >
@@ -262,7 +277,8 @@ function PreviewGridSection({
   onToggleDay,
   selectableKey,
   sectionClassName = "px-4 py-3",
-  gridClassName = "grid grid-cols-2 gap-1.5 md:grid-cols-5 xl:grid-cols-10",
+  gridClassName = "grid gap-1.5",
+  tileSize = DEFAULT_GENERATION_PREVIEW_SIZE,
 }: {
   title: string;
   total: number;
@@ -273,7 +289,9 @@ function PreviewGridSection({
   selectableKey: (generation: Generation) => boolean;
   sectionClassName?: string;
   gridClassName?: string;
+  tileSize?: number;
 }) {
+  const gridStyle = getGenerationGridStyle(tileSize);
   return (
     <section className={sectionClassName}>
       <div className="mb-4 flex items-center justify-between gap-2">
@@ -313,7 +331,7 @@ function PreviewGridSection({
                 </span>
                 <span>{group.label}</span>
               </button>
-              <div className={gridClassName}>
+              <div className={gridClassName} style={gridStyle}>
                 {group.items.map((generation) => {
                   const selectable = selectableKey(generation);
                   const checked = selectedIds.has(generation.id);
@@ -324,6 +342,7 @@ function PreviewGridSection({
                       checked={checked}
                       selectable={selectable}
                       onToggle={onToggle}
+                      tileSize={tileSize}
                     />
                   );
                 })}
@@ -542,6 +561,9 @@ export function AssignTables({
   );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
+  const [previewSize, setPreviewSize] = useGenerationPreviewSize(
+    "work-assign-preview-size",
+  );
 
   const allAssigned = assignedToClient.filter(
     (g) => !g.is_waste && !g.is_irrelevant && g.media_type !== "feature",
@@ -690,29 +712,34 @@ export function AssignTables({
         </div>
       )}
 
-      {accounts.length > 1 && (
-        <div className="flex flex-wrap gap-1.5 items-center">
-          <span className="text-[10px] text-neutral-500 uppercase tracking-wider mr-1">
-            Account:
-          </span>
-          {accounts.map((acc) => (
-            <button
-              key={acc.id}
-              type="button"
-              onClick={() => {
-                setSelectedAccountLabel(acc.label);
-              }}
-              className={`text-xs px-2 py-0.5 rounded transition-colors ${
-                selectedAccountLabel === acc.label
-                  ? "bg-lime-400 text-black"
-                  : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
-              }`}
-            >
-              {acc.label}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {accounts.length > 1 ? (
+          <div className="flex flex-wrap gap-1.5 items-center">
+            <span className="text-[10px] text-neutral-500 uppercase tracking-wider mr-1">
+              Account:
+            </span>
+            {accounts.map((acc) => (
+              <button
+                key={acc.id}
+                type="button"
+                onClick={() => {
+                  setSelectedAccountLabel(acc.label);
+                }}
+                className={`text-xs px-2 py-0.5 rounded transition-colors ${
+                  selectedAccountLabel === acc.label
+                    ? "bg-lime-400 text-black"
+                    : "bg-neutral-800 text-neutral-300 hover:bg-neutral-700"
+                }`}
+              >
+                {acc.label}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div />
+        )}
+        <PreviewSizeControl value={previewSize} onChange={setPreviewSize} />
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* ASSIGNED TO THIS CLIENT */}
@@ -745,7 +772,8 @@ export function AssignTables({
               onToggleDay={toggleSelectionGroup}
               selectableKey={canSelectGeneration}
               sectionClassName="px-4 py-3"
-              gridClassName="grid grid-cols-2 gap-1.5 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-[repeat(10,minmax(0,1fr))]"
+              gridClassName="grid gap-1.5"
+              tileSize={previewSize}
             />
           )}
         </div>
@@ -787,7 +815,8 @@ export function AssignTables({
               onToggleDay={toggleSelectionGroup}
               selectableKey={canSelectGeneration}
               sectionClassName="px-4 py-3"
-              gridClassName="grid grid-cols-2 gap-1.5 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-[repeat(10,minmax(0,1fr))]"
+              gridClassName="grid gap-1.5"
+              tileSize={previewSize}
             />
           )}
         </div>
@@ -821,7 +850,8 @@ export function AssignTables({
               onToggleDay={toggleSelectionGroup}
               selectableKey={canSelectGeneration}
               sectionClassName="px-4 py-3"
-              gridClassName="grid grid-cols-2 gap-1.5 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-[repeat(10,minmax(0,1fr))]"
+              gridClassName="grid gap-1.5"
+              tileSize={previewSize}
             />
           </div>
         </div>

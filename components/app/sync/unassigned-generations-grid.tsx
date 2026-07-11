@@ -3,6 +3,12 @@
 import { memo } from "react";
 import { Check } from "lucide-react";
 import { MediaPreview } from "@/components/app/works/[id]/assign-tables";
+import {
+  DEFAULT_GENERATION_PREVIEW_SIZE,
+  getGenerationCheckboxClassName,
+  getGenerationGridStyle,
+  getGenerationTileClassName,
+} from "@/components/app/generations/preview-size-control";
 
 export interface UnassignedGenerationPreview {
   id: string;
@@ -26,6 +32,7 @@ type Props = {
   gridClassName?: string;
   tileClassName?: string;
   checkboxClassName?: string;
+  tileSize?: number;
 };
 
 function hfAssetUrl(externalId: string) {
@@ -101,16 +108,16 @@ export const UnassignedGenerationsGrid = memo(function UnassignedGenerationsGrid
   onToggleDay,
   onToggle,
   sectionClassName = "px-4 py-3",
-  gridClassName = "grid grid-cols-2 gap-2 md:grid-cols-5 xl:grid-cols-10",
+  gridClassName = "grid gap-2",
   tileClassName = "",
   checkboxClassName = "",
+  tileSize = DEFAULT_GENERATION_PREVIEW_SIZE,
 }: Props) {
   const resolvedTileClassName =
-    tileClassName ||
-    "group relative block aspect-square overflow-hidden rounded-xl border bg-neutral-950 transition xl:rounded-2xl";
+    tileClassName || getGenerationTileClassName(tileSize);
   const resolvedCheckboxClassName =
-    checkboxClassName ||
-    "absolute left-3 top-3 z-10 flex size-8 items-center justify-center rounded-lg border-2 border-white/25 bg-black/35 text-transparent backdrop-blur-sm transition hover:border-white/45";
+    checkboxClassName || getGenerationCheckboxClassName(tileSize);
+  const gridStyle = getGenerationGridStyle(tileSize);
 
   return (
     <div className="divide-y divide-neutral-800">
@@ -138,7 +145,7 @@ export const UnassignedGenerationsGrid = memo(function UnassignedGenerationsGrid
               <span>{group.label}</span>
             </button>
 
-            <div className={gridClassName}>
+            <div className={gridClassName} style={gridStyle}>
               {group.items.map((generation) => {
                 const checked = selectedIds.has(generation.id);
 

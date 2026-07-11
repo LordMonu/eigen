@@ -12,7 +12,7 @@ import { ClientsHeader } from "@/components/app/clients/clients-header";
 import { SetupRdButton } from "@/components/app/clients/setup-rd-button";
 
 interface PageProps {
-  searchParams: Promise<{ status?: string }>;
+  searchParams: Promise<{ status?: string; q?: string }>;
 }
 
 interface ClientRpcRow {
@@ -27,7 +27,8 @@ interface ClientRpcRow {
 
 export default async function ClientsPage({ searchParams }: PageProps) {
   const supabase = await createClient();
-  const { status: filterStatus } = await searchParams;
+  const { status: filterStatus, q: rawQuery } = await searchParams;
+  const query = rawQuery?.trim().toLowerCase() || "";
 
   const [membership, { data: rows, error }, { data: rdClient }] =
     await Promise.all([
@@ -65,6 +66,10 @@ export default async function ClientsPage({ searchParams }: PageProps) {
 
   const activeClients = enrichedClients.filter((c) => !c.deletedAt);
   const archivedClients = enrichedClients.filter((c) => !!c.deletedAt);
+  const matchesQuery = (client: (typeof enrichedClients)[number]) =>
+    query.length === 0 ||
+    client.name.toLowerCase().includes(query) ||
+    (client.industry || "").toLowerCase().includes(query);
 
   const statusCounts: Record<ClientStatus, number> = {
     ongoing: 0,
@@ -80,8 +85,9 @@ export default async function ClientsPage({ searchParams }: PageProps) {
 
   const visibleClients =
     filterStatus && filterStatus !== "all"
-      ? activeClients.filter((c) => c.status === filterStatus)
-      : activeClients;
+      ? activeClients.filter((c) => c.status === filterStatus && matchesQuery(c))
+      : activeClients.filter(matchesQuery);
+  const visibleArchivedClients = archivedClients.filter(matchesQuery);
 
   const sorted = sortClientsByStatus(visibleClients);
   const canCreate = can(membership.role, "clients", "create");
@@ -105,6 +111,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
         totalCount={activeClients.length}
         statusCounts={statusCounts}
         activeFilter={filterStatus || "all"}
+        activeQuery={rawQuery || ""}
         canCreate={canCreate}
       />
 
@@ -154,7 +161,7 @@ export default async function ClientsPage({ searchParams }: PageProps) {
         </div>
       )}
 
-      {archivedClients.length > 0 &&
+      {visibleArchivedClients.length > 0 &&
         (!filterStatus || filterStatus === "all") && (
           <section className="space-y-3 opacity-50">
             <div className="flex items-center gap-3">
@@ -162,12 +169,12 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                 Archived
               </h2>
               <span className="text-xs text-neutral-600">
-                ({archivedClients.length})
+                ({visibleArchivedClients.length})
               </span>
               <div className="flex-1 border-t border-neutral-800" />
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {archivedClients.map((c) => (
+              {visibleArchivedClients.map((c) => (
                 <ClientCard key={c.id} client={c} archived />
               ))}
             </div>

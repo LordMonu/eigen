@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { RefreshCw, X } from "lucide-react";
 import { UnassignedGenerationsSkeleton } from "@/components/app/sync/unassigned-generations-skeleton";
 import { UnassignedGenerationsGrid } from "@/components/app/sync/unassigned-generations-grid";
+import { PreviewSizeControl } from "@/components/app/generations/preview-size-control";
 
 export interface UnassignedGeneration {
   id: string;
@@ -57,6 +58,8 @@ type Props = {
   onOpenDestination: () => void;
   onLoadMore: () => void;
   cooldownLeft: number;
+  previewSize: number;
+  onPreviewSizeChange: (value: number) => void;
   batchBusy: null | "actual" | "waste" | "irrelevant";
   batchError: string | null;
   destOpen: boolean;
@@ -102,6 +105,8 @@ export function SyncPickerModal({
   onOpenDestination,
   onLoadMore,
   cooldownLeft,
+  previewSize,
+  onPreviewSizeChange,
   destOpen,
   batchBusy,
   batchError,
@@ -127,7 +132,7 @@ export function SyncPickerModal({
           onClick={() => !isPending && !syncing && setPickerOpen(false)}
         >
           <div
-            className="bg-neutral-950 border border-neutral-800 rounded-lg w-[95vw] max-w-[95vw] max-h-[95vh] flex flex-col"
+            className="bg-neutral-950 border border-neutral-800 rounded-lg w-[95vw] max-w-[90vw] h-[85vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="sticky top-0 z-10 bg-neutral-950 border-b border-neutral-800 px-4 py-3 flex items-center justify-between gap-3">
@@ -192,6 +197,11 @@ export function SyncPickerModal({
                     >
                       {allVisibleSelected ? "Deselect loaded" : "Select loaded"}
                     </button>
+                    <span className="text-neutral-700 mx-1">·</span>
+                    <PreviewSizeControl
+                      value={previewSize}
+                      onChange={onPreviewSizeChange}
+                    />
                   </div>
                 )}
               </div>
@@ -257,7 +267,8 @@ export function SyncPickerModal({
                       <div className="px-4 py-1.5 border-b border-neutral-800 bg-neutral-900/40 flex items-center gap-2">
                         <RefreshCw className="size-3 text-lime-400 animate-spin" />
                         <span className="text-[11px] text-neutral-400">
-                          Syncing from Higgsfield — new items will appear shortly…
+                          Syncing from Higgsfield — new items will appear
+                          shortly…
                         </span>
                       </div>
                     )}
@@ -267,9 +278,8 @@ export function SyncPickerModal({
                       onToggleDay={toggleSelectDay}
                       onToggle={toggleSelect}
                       sectionClassName="px-4 py-3"
-                      gridClassName="grid grid-cols-2 gap-1.5 md:grid-cols-5 lg:grid-cols-8 xl:grid-cols-[repeat(16,minmax(0,1fr))]"
-                      tileClassName="group relative block aspect-square overflow-hidden rounded-lg border bg-neutral-950 transition"
-                      checkboxClassName="absolute left-2 top-2 z-10 flex size-6 items-center justify-center rounded-lg border-2 border-white/25 bg-black/35 text-transparent backdrop-blur-sm transition hover:border-white/45"
+                      gridClassName="grid gap-1.5"
+                      tileSize={previewSize}
                     />
                   </>
                 )}
@@ -325,7 +335,8 @@ export function SyncPickerModal({
                   {selectedIdCount === 1 ? "" : "s"}
                 </h2>
                 <p className="text-xs text-neutral-500 mt-0.5">
-                  Pick the destination client, then mark as actual usage or wastage.
+                  Pick the destination client, then mark as actual usage or
+                  wastage.
                 </p>
               </div>
               <button
@@ -346,12 +357,12 @@ export function SyncPickerModal({
                 <select
                   value={destClientId}
                   onChange={(e) => {
-                    const value = e.target.value
+                    const value = e.target.value;
                     if (value === "__create_client__") {
-                      onCreateClientShortcut()
-                      return
+                      onCreateClientShortcut();
+                      return;
                     }
-                    setDestClientId(value)
+                    setDestClientId(value);
                   }}
                   disabled={loadingSel || batchBusy !== null || isPending}
                   className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-sm text-white disabled:opacity-50 focus:outline-none focus:border-neutral-500"
@@ -371,18 +382,14 @@ export function SyncPickerModal({
                 <select
                   value={destWorkId}
                   onChange={(e) => {
-                    const value = e.target.value
+                    const value = e.target.value;
                     if (value === "__create_work__") {
-                      onCreateWorkShortcut()
-                      return
+                      onCreateWorkShortcut();
+                      return;
                     }
-                    setDestWorkId(value)
+                    setDestWorkId(value);
                   }}
-                  disabled={
-                    loadingSel ||
-                    batchBusy !== null ||
-                    isPending
-                  }
+                  disabled={loadingSel || batchBusy !== null || isPending}
                   className="w-full bg-neutral-900 border border-neutral-700 rounded px-2 py-1.5 text-sm text-white disabled:opacity-50 focus:outline-none focus:border-neutral-500"
                 >
                   <option value="__create_work__">+ Add new work</option>

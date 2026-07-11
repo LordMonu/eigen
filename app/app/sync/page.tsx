@@ -26,6 +26,10 @@ import {
 import { UnassignedGenerationsGrid } from "@/components/app/sync/unassigned-generations-grid";
 import { ClientFormDialog } from "@/components/app/clients/client-form-dialog";
 import { CreateWorkDialog } from "@/components/app/works/create-work-dialog";
+import {
+  PreviewSizeControl,
+  useGenerationPreviewSize,
+} from "@/components/app/generations/preview-size-control";
 import { PaginationButtons } from "@/components/ui/pagination-buttons";
 import {
   fetchSyncStats,
@@ -164,6 +168,8 @@ export default function SyncPage() {
   const [assignedPage, setAssignedPage] = useState(1);
   const [wastedPage, setWastedPage] = useState(1);
   const [irrelevantPage, setIrrelevantPage] = useState(1);
+  const [unassignedPreviewSize, setUnassignedPreviewSize] =
+    useGenerationPreviewSize("sync-unassigned-preview-size");
 
   const [supabase] = useState(() => createClient());
 
@@ -943,6 +949,11 @@ export default function SyncPage() {
                     next sync in {Math.ceil(cooldownLeft / 60000)}m
                   </span>
                 )}
+                <span className="text-neutral-700 mx-1">·</span>
+                <PreviewSizeControl
+                  value={unassignedPreviewSize}
+                  onChange={setUnassignedPreviewSize}
+                />
               </div>
             )}
           </div>
@@ -968,7 +979,8 @@ export default function SyncPage() {
                 onToggleDay={toggleUnassignedDay}
                 onToggle={toggleUnassignedSelection}
                 sectionClassName="px-4 py-2"
-                gridClassName="grid grid-cols-2 gap-2 md:grid-cols-5 xl:grid-cols-10 2xl:grid-cols-12"
+                gridClassName="grid gap-2"
+                tileSize={unassignedPreviewSize}
               />
             </div>
             {hasMoreUnassigned && (
